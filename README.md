@@ -42,7 +42,9 @@ Metrics.stop();
 ```
 
 Select the logger implementation via a system property (defaults to
-`noop`, so nothing happens unless you opt in):
+`noop`, so nothing happens unless you opt in — see
+[ARCHITECTURE.md#default-behavior](ARCHITECTURE.md#default-behavior)
+for the full list of defaults):
 
 ```bash
 -Dmetrics.implementation=file
