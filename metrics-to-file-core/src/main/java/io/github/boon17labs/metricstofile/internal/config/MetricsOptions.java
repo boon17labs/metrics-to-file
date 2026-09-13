@@ -10,17 +10,19 @@ public final class MetricsOptions {
     private final boolean classLoading;
     private final boolean cpu;
     private final boolean codeCache;
+    private final boolean processMemory;
 
     public MetricsOptions(final boolean directMemory, final boolean classLoading,
-            final boolean cpu, final boolean codeCache) {
+            final boolean cpu, final boolean codeCache, final boolean processMemory) {
         this.directMemory = directMemory;
         this.classLoading = classLoading;
         this.cpu = cpu;
         this.codeCache = codeCache;
+        this.processMemory = processMemory;
     }
 
     public static MetricsOptions defaults() {
-        return new MetricsOptions(false, false, false, false);
+        return new MetricsOptions(false, false, false, false, false);
     }
 
     public boolean directMemory() {
@@ -37,5 +39,9 @@ public final class MetricsOptions {
 
     public boolean codeCache() {
         return codeCache;
+    }
+
+    public boolean processMemory() {
+        return processMemory;
     }
 }

@@ -103,7 +103,7 @@ files. See ARCHITECTURE.md for how they relate.
   background threads at all. Any builder field left unset falls back
   to its matching `metrics.*` system property (`metrics.log.dir`,
   `metrics.interval` in minutes, `metrics.keep.days`,
-  `metrics.opt.direct`/`classloading`/`cpu`/`codecache`), then to the
+  `metrics.opt.direct`/`classloading`/`cpu`/`codecache`/`process`), then to the
   documented default — see `internal.config.BuilderProperties`.
   `Metrics.stop()` shuts down whichever daemons are running, joining each
   (bounded, 5s) so no write is left in flight before it returns, and

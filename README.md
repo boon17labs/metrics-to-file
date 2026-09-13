@@ -35,6 +35,7 @@ Metrics.builder()
     .withClassLoading()                  // opt-in
     .withCpu()                           // opt-in
     .withCodeCache()                     // opt-in
+    .withProcessMemory()                 // opt-in
     .start();
 
 // Stop — symmetric with start
@@ -50,8 +51,9 @@ for the full list of defaults):
 -Dmetrics.implementation=file
 ```
 
-Default metrics collected: heap, threads, metaspace, GC. Opt-in:
-direct memory, class loading, CPU, code cache.
+Default metrics collected: heap, threads (including an approximate
+`stack_mb`), metaspace, GC. Opt-in: direct memory, class loading, CPU,
+code cache, process memory (RSS, Linux only).
 
 Every other builder field falls back to a system property when not
 set explicitly — useful for tuning an app that only calls the
@@ -65,6 +67,7 @@ one-line `Metrics.start("app-name")`, with no code change:
 -Dmetrics.opt.classloading=true
 -Dmetrics.opt.cpu=true
 -Dmetrics.opt.codecache=true
+-Dmetrics.opt.process=true
 ```
 
 ### Custom metrics

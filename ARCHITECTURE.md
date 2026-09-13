@@ -113,8 +113,12 @@ accommodates both without a separate abstraction.
 the four defaults (`HeapMetricsCollector`, `ThreadMetricsCollector`,
 `MetaspaceMetricsCollector`, `GcMetricsCollector`) plus whichever
 opt-in ones (`DirectMemoryMetricsCollector`, `ClassLoadingMetricsCollector`,
-`CpuMetricsCollector`, `CodeCacheMetricsCollector`) `MetricsOptions`
-says to include, based on the `withX()` flags on `Metrics.builder()`.
+`CpuMetricsCollector`, `CodeCacheMetricsCollector`, `ProcessMetricsCollector`)
+`MetricsOptions` says to include, based on the `withX()` flags on
+`Metrics.builder()`. `ThreadMetricsCollector` (a default, always on) also
+reports `stack_mb`, an approximation (live thread count × HotSpot's common
+default 512KB stack size) rather than a measured value, since the JVM
+exposes no public API for actual per-thread stack memory.
 On every tick it calls `collector.collect()` for each and logs every
 returned group under that collector's `type()`.
 
@@ -247,7 +251,7 @@ configuration:
 | log directory            | `./metrics`                         |
 | collection interval      | 60 minutes                          |
 | retention (`keepDays`)   | 7 days                              |
-| opt-in metrics           | all off (direct memory, classloading, CPU, code cache) |
+| opt-in metrics           | all off (direct memory, classloading, CPU, code cache, process memory) |
 
 So calling `Metrics.start("app")` with `metrics.implementation` unset
 starts no background threads at all — `NoOpMetricsLogger`'s
@@ -275,6 +279,7 @@ order):
 | `withClassLoading()` | `metrics.opt.classloading` | `true`/`false`        |
 | `withCpu()`          | `metrics.opt.cpu`          | `true`/`false`        |
 | `withCodeCache()`    | `metrics.opt.codecache`    | `true`/`false`        |
+| `withProcessMemory()`| `metrics.opt.process`      | `true`/`false`        |
 
 This is what lets an ops team tune a deployed app — interval,
 retention, opt-in metrics — via a JVM flag, with no code change and

@@ -113,6 +113,7 @@ public final class Metrics {
         private Boolean classLoading;
         private Boolean cpu;
         private Boolean codeCache;
+        private Boolean processMemory;
 
         private Builder() {
         }
@@ -157,6 +158,11 @@ public final class Metrics {
             return this;
         }
 
+        public Builder withProcessMemory() {
+            this.processMemory = true;
+            return this;
+        }
+
         public void start() {
             if (appName == null) {
                 throw new IllegalStateException("appName must be set before calling start()");
@@ -165,7 +171,8 @@ public final class Metrics {
                     BuilderProperties.flag(directMemory, "metrics.opt.direct"),
                     BuilderProperties.flag(classLoading, "metrics.opt.classloading"),
                     BuilderProperties.flag(cpu, "metrics.opt.cpu"),
-                    BuilderProperties.flag(codeCache, "metrics.opt.codecache"));
+                    BuilderProperties.flag(codeCache, "metrics.opt.codecache"),
+                    BuilderProperties.flag(processMemory, "metrics.opt.process"));
             apply(appName, BuilderProperties.logDir(logDir), BuilderProperties.interval(interval),
                     BuilderProperties.keepDays(keepDays), options);
         }

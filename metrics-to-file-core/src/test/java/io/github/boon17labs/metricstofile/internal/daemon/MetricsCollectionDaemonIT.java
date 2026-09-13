@@ -133,20 +133,21 @@ class MetricsCollectionDaemonIT {
         assertEquals(0, countOfType(logger, "classloading"));
         assertEquals(0, countOfType(logger, "cpu"));
         assertEquals(0, countOfType(logger, "codecache"));
+        assertEquals(0, countOfType(logger, "process"));
     }
 
     @Test
     void shouldCollectOptInMetricsWhenEnabled() throws InterruptedException {
         // given
         final InMemoryMetricsLogger logger = new InMemoryMetricsLogger();
-        final MetricsOptions options = new MetricsOptions(true, true, true, true);
+        final MetricsOptions options = new MetricsOptions(true, true, true, true, true);
         final MetricsCollectionDaemon daemon =
                 new MetricsCollectionDaemon(logger, SHORT_INTERVAL_MILLIS, options);
 
         // when
         daemon.start();
         try {
-            waitUntil(() -> countOfType(logger, "codecache") >= 2);
+            waitUntil(() -> countOfType(logger, "process") >= 2);
         } finally {
             daemon.shutdown();
         }
@@ -156,6 +157,7 @@ class MetricsCollectionDaemonIT {
         assertTrue(countOfType(logger, "classloading") >= 2);
         assertTrue(countOfType(logger, "cpu") >= 2);
         assertTrue(countOfType(logger, "codecache") >= 2);
+        assertTrue(countOfType(logger, "process") >= 2);
     }
 
     private static long countOfType(final InMemoryMetricsLogger logger, final String type) {

@@ -28,10 +28,11 @@ class ThreadMetricsCollectorTest {
         final Map<String, Object> values = onlyGroup();
 
         // then
-        assertEquals(3, values.size());
+        assertEquals(4, values.size());
         assertTrue(values.containsKey("live"));
         assertTrue(values.containsKey("peak"));
         assertTrue(values.containsKey("deadlocked"));
+        assertTrue(values.containsKey("stack_mb"));
     }
 
     @Test
@@ -46,6 +47,17 @@ class ThreadMetricsCollectorTest {
         assertTrue(live >= 1);
         assertTrue(peak >= live);
         assertTrue(deadlocked >= 0);
+    }
+
+    @Test
+    void shouldApproximateStackMemoryAsLiveThreadsTimesDefaultStackSize() {
+        // when
+        final Map<String, Object> values = onlyGroup();
+        final int live = (int) values.get("live");
+        final long stackMb = (long) values.get("stack_mb");
+
+        // then — 512KB per live thread, converted to MB
+        assertEquals(live * 512L / 1024L, stackMb);
     }
 
     @Test

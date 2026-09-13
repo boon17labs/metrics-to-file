@@ -9,6 +9,7 @@ import io.github.boon17labs.metricstofile.internal.collect.GcMetricsCollector;
 import io.github.boon17labs.metricstofile.internal.collect.HeapMetricsCollector;
 import io.github.boon17labs.metricstofile.internal.collect.MetaspaceMetricsCollector;
 import io.github.boon17labs.metricstofile.internal.collect.MetricsCollector;
+import io.github.boon17labs.metricstofile.internal.collect.ProcessMetricsCollector;
 import io.github.boon17labs.metricstofile.internal.collect.ThreadMetricsCollector;
 import io.github.boon17labs.metricstofile.internal.config.MetricsOptions;
 
@@ -58,6 +59,9 @@ public final class MetricsCollectionDaemon extends IntervalDaemon {
         }
         if (options.codeCache()) {
             collectors.add(new CodeCacheMetricsCollector());
+        }
+        if (options.processMemory()) {
+            collectors.add(new ProcessMetricsCollector());
         }
         return collectors;
     }

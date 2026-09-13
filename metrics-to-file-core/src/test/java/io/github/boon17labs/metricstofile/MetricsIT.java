@@ -34,6 +34,7 @@ class MetricsIT {
         System.clearProperty("metrics.opt.classloading");
         System.clearProperty("metrics.opt.cpu");
         System.clearProperty("metrics.opt.codecache");
+        System.clearProperty("metrics.opt.process");
     }
 
     @Test
@@ -269,6 +270,7 @@ class MetricsIT {
         assertEquals(0, entriesOfType("classloading"));
         assertEquals(0, entriesOfType("cpu"));
         assertEquals(0, entriesOfType("codecache"));
+        assertEquals(0, entriesOfType("process"));
     }
 
     @Test
@@ -284,14 +286,16 @@ class MetricsIT {
                 .withClassLoading()
                 .withCpu()
                 .withCodeCache()
+                .withProcessMemory()
                 .start();
 
         // then
-        waitUntil(() -> entriesOfType("codecache") >= 2);
+        waitUntil(() -> entriesOfType("process") >= 2);
         assertTrue(entriesOfType("direct") >= 2);
         assertTrue(entriesOfType("classloading") >= 2);
         assertTrue(entriesOfType("cpu") >= 2);
         assertTrue(entriesOfType("codecache") >= 2);
+        assertTrue(entriesOfType("process") >= 2);
     }
 
     @Test
@@ -342,6 +346,7 @@ class MetricsIT {
         System.setProperty("metrics.opt.classloading", "true");
         System.setProperty("metrics.opt.cpu", "true");
         System.setProperty("metrics.opt.codecache", "true");
+        System.setProperty("metrics.opt.process", "true");
 
         // when
         Metrics.builder()
@@ -350,11 +355,12 @@ class MetricsIT {
                 .start();
 
         // then
-        waitUntil(() -> entriesOfType("codecache") >= 2);
+        waitUntil(() -> entriesOfType("process") >= 2);
         assertTrue(entriesOfType("direct") >= 2);
         assertTrue(entriesOfType("classloading") >= 2);
         assertTrue(entriesOfType("cpu") >= 2);
         assertTrue(entriesOfType("codecache") >= 2);
+        assertTrue(entriesOfType("process") >= 2);
     }
 
     private static long entryCount() {
