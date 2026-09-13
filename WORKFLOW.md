@@ -19,6 +19,6 @@
 
 ## Git
 
-- Remote: https://github.com/guranxp/metrics-to-file
+- Remote: https://github.com/boon17labs/metrics-to-file
 - Branch: main
 - Commit messages in English, short and descriptive

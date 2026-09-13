@@ -13,8 +13,8 @@ requiring Prometheus, Grafana, or other infrastructure. One line of code:
 
 ```
 Name:         metrics-to-file
-GitHub:       https://github.com/guranxp/metrics-to-file
-Group id:     io.github.guranxp
+GitHub:       https://github.com/boon17labs/metrics-to-file
+Group id:     io.github.boon17labs
 Java minimum: 8 (bump to 21 in v2 once target apps upgrade)
 License:      Apache 2.0
 ```
@@ -65,12 +65,12 @@ Integration tests are named `*IT.java` (run by Failsafe, only in the
 ## Packages
 
 ```
-io.github.guranxp.metricstofile            ← public API
-io.github.guranxp.metricstofile.internal.collect  ← MetricsCollector + implementations
-io.github.guranxp.metricstofile.internal.provider ← MetricsLoggerProvider SPI + resolver
-io.github.guranxp.metricstofile.internal.daemon   ← IntervalDaemon + implementations
-io.github.guranxp.metricstofile.internal.file     ← file format/permissions/cleanup
-io.github.guranxp.metricstofile.internal.config   ← MetricsOptions, BuilderProperties
+io.github.boon17labs.metricstofile            ← public API
+io.github.boon17labs.metricstofile.internal.collect  ← MetricsCollector + implementations
+io.github.boon17labs.metricstofile.internal.provider ← MetricsLoggerProvider SPI + resolver
+io.github.boon17labs.metricstofile.internal.daemon   ← IntervalDaemon + implementations
+io.github.boon17labs.metricstofile.internal.file     ← file format/permissions/cleanup
+io.github.boon17labs.metricstofile.internal.config   ← MetricsOptions, BuilderProperties
 ```
 
 None of the `internal.*` sub-packages are public API — grouped by

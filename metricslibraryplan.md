@@ -12,8 +12,8 @@ The goal is a reusable open source library on GitHub.
 
 ```
 Name:         metrics-to-file
-GitHub:       github.com/guranxp/metrics-to-file
-Group id:     io.github.guranxp
+GitHub:       github.com/boon17labs/metrics-to-file
+Group id:     io.github.boon17labs
 Java minimum: 8 (bump to 21 in v2 once target apps upgrade)
 License:      Apache 2.0
 ```
@@ -120,7 +120,7 @@ java -jar app.jar
 The implementation is selected via ServiceLoader:
 
 ```
-src/main/resources/META-INF/services/io.github.guranxp.metricstofile.MetricsLogger
+src/main/resources/META-INF/services/io.github.boon17labs.metricstofile.MetricsLogger
 → contains all three implementations
 ```
 
@@ -256,7 +256,7 @@ Zero-config integration with Spring Boot via autoconfiguration.
 
 ```
 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
-→ io.github.guranxp.metricstofile.spring.MetricsAutoConfiguration
+→ io.github.boon17labs.metricstofile.spring.MetricsAutoConfiguration
 ```
 
 ### Web server detection
@@ -358,7 +358,7 @@ Fallback to noop if the file can't be created
 
 ## Next steps
 
-1. Set up GitHub repo (guranxp/metrics-to-file) with Maven
+1. Set up GitHub repo (boon17labs/metrics-to-file) with Maven
    multi-module structure
 2. Start with metrics-to-file-core
 3. Implement FileMetricsLogger

@@ -1,0 +1,3 @@
+io.github.boon17labs.metricstofile.internal.provider.FileMetricsLoggerProvider
+io.github.boon17labs.metricstofile.internal.provider.InMemoryMetricsLoggerProvider
+io.github.boon17labs.metricstofile.internal.provider.NoOpMetricsLoggerProvider
