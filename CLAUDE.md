@@ -43,9 +43,11 @@ metrics-to-file-autoinstrument    → automatic instrumentation via reflection
    `java.lang.*`, `java.util.*`, `java.io.*`, `java.lang.management.*`,
    `java.time.*`. File I/O uses `java.io` (not `java.nio.file`).
    `com.sun.management.OperatingSystemMXBean` is allowed for the CPU
-   opt-in metric only (direct cast with an `instanceof` guard, never a
-   blind cast) — it ships with every mainstream JDK, but isn't part of
-   the Java SE spec, so this is a deliberate, narrow exception.
+   opt-in metric, and as the process opt-in's non-Linux fallback
+   (direct cast with an `instanceof` guard, never a blind cast) — it
+   ships with every mainstream JDK, but isn't part of the Java SE
+   spec, so this is a deliberate, narrow exception, not a general
+   license to reach for it elsewhere.
 3. **Threading** — daemon threads for file writing and cleanup.
    `close()` shuts down both.
 4. **Error handling** — the host app is never affected by metrics

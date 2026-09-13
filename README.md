@@ -53,7 +53,10 @@ for the full list of defaults):
 
 Default metrics collected: heap, threads (including an approximate
 `stack_mb`), metaspace, GC. Opt-in: direct memory, class loading, CPU,
-code cache, process memory (RSS, Linux only).
+code cache, process memory (`rss_mb` — true RSS, Linux only; on other
+platforms `committed_vmem_mb` instead, a quantitatively different
+figure — see `ProcessMetricsCollector`'s javadoc — or neither key if
+unavailable at all).
 
 Every other builder field falls back to a system property when not
 set explicitly — useful for tuning an app that only calls the
