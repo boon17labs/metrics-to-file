@@ -1,4 +1,4 @@
-# filemetrics
+# metrics-to-file
 
 Open source Java library that writes JVM metrics and custom metrics to
 file — no external dependencies in the core module.
@@ -12,16 +12,16 @@ requiring Prometheus, Grafana, or other infrastructure. One line of code:
 ## Project decisions
 
 ```
-Name:         filemetrics
-GitHub:       https://github.com/guranxp-sandbox/filemetrics
-Group id:     io.github.guranxpsandbox
+Name:         metrics-to-file
+GitHub:       https://github.com/guranxp/metrics-to-file
+Group id:     io.github.guranxp
 Java minimum: 8 (bump to 21 in v2 once target apps upgrade)
 License:      Apache 2.0
 ```
 
 ## API stability policy
 
-Public classes and methods in `filemetrics-core` are stable from v1.0.
+Public classes and methods in `metrics-to-file-core` are stable from v1.0.
 No breaking changes are introduced without a new major version.
 Internal classes (the `internal` package and every sub-package under
 it) are not considered public API.
@@ -29,17 +29,17 @@ it) are not considered public API.
 ## Module structure
 
 ```
-filemetrics-core              → JVM and custom metrics to file, no external dependencies
-filemetrics-prometheus        → Micrometer + Prometheus format, file and/or server
-filemetrics-spring            → Spring Boot autoconfiguration
-filemetrics-autoinstrument    → automatic instrumentation via reflection
+metrics-to-file-core              → JVM and custom metrics to file, no external dependencies
+metrics-to-file-prometheus        → Micrometer + Prometheus format, file and/or server
+metrics-to-file-spring            → Spring Boot autoconfiguration
+metrics-to-file-autoinstrument    → automatic instrumentation via reflection
 ```
 
-## Java code standard (filemetrics-core)
+## Java code standard (metrics-to-file-core)
 
 1. **`final` everywhere** — every method parameter and local variable is
    declared `final`.
-2. **No external dependencies** in `filemetrics-core` — only
+2. **No external dependencies** in `metrics-to-file-core` — only
    `java.lang.*`, `java.util.*`, `java.io.*`, `java.lang.management.*`,
    `java.time.*`. File I/O uses `java.io` (not `java.nio.file`).
    `com.sun.management.OperatingSystemMXBean` is allowed for the CPU
@@ -65,12 +65,12 @@ Integration tests are named `*IT.java` (run by Failsafe, only in the
 ## Packages
 
 ```
-io.github.guranxpsandbox.filemetrics            ← public API
-io.github.guranxpsandbox.filemetrics.internal.collect  ← MetricsCollector + implementations
-io.github.guranxpsandbox.filemetrics.internal.provider ← MetricsLoggerProvider SPI + resolver
-io.github.guranxpsandbox.filemetrics.internal.daemon   ← IntervalDaemon + implementations
-io.github.guranxpsandbox.filemetrics.internal.file     ← file format/permissions/cleanup
-io.github.guranxpsandbox.filemetrics.internal.config   ← MetricsOptions, BuilderProperties
+io.github.guranxp.metricstofile            ← public API
+io.github.guranxp.metricstofile.internal.collect  ← MetricsCollector + implementations
+io.github.guranxp.metricstofile.internal.provider ← MetricsLoggerProvider SPI + resolver
+io.github.guranxp.metricstofile.internal.daemon   ← IntervalDaemon + implementations
+io.github.guranxp.metricstofile.internal.file     ← file format/permissions/cleanup
+io.github.guranxp.metricstofile.internal.config   ← MetricsOptions, BuilderProperties
 ```
 
 None of the `internal.*` sub-packages are public API — grouped by

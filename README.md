@@ -1,4 +1,4 @@
-# filemetrics
+# metrics-to-file
 
 Open source Java library that writes JVM metrics and custom metrics to
 file — no external dependencies in the core module.
@@ -11,13 +11,13 @@ line of code: `Metrics.start("app-name")`.
 
 This project is early-stage and not yet published to Maven Central.
 
-- `filemetrics-core` — done: `MetricsLogger` interface,
+- `metrics-to-file-core` — done: `MetricsLogger` interface,
   `NoOpMetricsLogger` (default), `InMemoryMetricsLogger` (for tests),
   `FileMetricsLogger`, and the `Metrics` facade (lifecycle,
   configuration, default + opt-in metric collection, log file
   cleanup, restricted file permissions).
-- `filemetrics-prometheus`, `filemetrics-spring`,
-  `filemetrics-autoinstrument` — not started.
+- `metrics-to-file-prometheus`, `metrics-to-file-spring`,
+  `metrics-to-file-autoinstrument` — not started.
 
 ## Usage
 
@@ -83,16 +83,16 @@ periodically, rather than once per event. See
 ## Modules
 
 ```
-filemetrics-core              → JVM and custom metrics to file, no
-                                 external dependencies
-filemetrics-prometheus        → Micrometer + Prometheus format, file
-                                 and/or server
-filemetrics-spring            → Spring Boot autoconfiguration
-filemetrics-autoinstrument    → automatic instrumentation via
-                                 reflection
+metrics-to-file-core              → JVM and custom metrics to file, no
+                                     external dependencies
+metrics-to-file-prometheus        → Micrometer + Prometheus format, file
+                                     and/or server
+metrics-to-file-spring            → Spring Boot autoconfiguration
+metrics-to-file-autoinstrument    → automatic instrumentation via
+                                     reflection
 ```
 
-`filemetrics-core` has no external dependencies. The other modules
+`metrics-to-file-core` has no external dependencies. The other modules
 build on top of it and pull in their own dependencies (Micrometer,
 Spring Boot, etc.) as needed.
 

@@ -4,14 +4,14 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.github.guranxpsandbox</groupId>
-    <artifactId>filemetrics</artifactId>
+    <groupId>io.github.guranxp</groupId>
+    <artifactId>metrics-to-file</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>filemetrics</name>
+    <name>metrics-to-file</name>
     <description>JVM and application metrics to file — no external dependencies required</description>
-    <url>https://github.com/guranxp-sandbox/filemetrics</url>
+    <url>https://github.com/guranxp/metrics-to-file</url>
 
     <licenses>
         <license>
@@ -21,10 +21,10 @@
     </licenses>
 
     <modules>
-        <module>filemetrics-core</module>
-        <module>filemetrics-prometheus</module>
-        <module>filemetrics-spring</module>
-        <module>filemetrics-autoinstrument</module>
+        <module>metrics-to-file-core</module>
+        <module>metrics-to-file-prometheus</module>
+        <module>metrics-to-file-spring</module>
+        <module>metrics-to-file-autoinstrument</module>
     </modules>
 
     <properties>
@@ -36,8 +36,8 @@
     <dependencyManagement>
         <dependencies>
             <dependency>
-                <groupId>io.github.guranxpsandbox</groupId>
-                <artifactId>filemetrics-core</artifactId>
+                <groupId>io.github.guranxp</groupId>
+                <artifactId>metrics-to-file-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

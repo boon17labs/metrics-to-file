@@ -1,6 +1,6 @@
 # Architecture
 
-Conceptual overview of `filemetrics-core`: how metrics are collected,
+Conceptual overview of `metrics-to-file-core`: how metrics are collected,
 stored, and cleaned up, and how the threading model works. Not a
 line-by-line code walkthrough — see the source and its Javadoc for
 that. Update this file when the architecture itself changes, not on
@@ -46,7 +46,7 @@ void log(String type, Map<String, Object> values);
 void close();
 ```
 
-Three implementations ship in `filemetrics-core`:
+Three implementations ship in `metrics-to-file-core`:
 
 - `NoOpMetricsLogger` — discards everything. The default, so the
   library does nothing until explicitly configured.
@@ -83,8 +83,8 @@ constructor to instantiate a provider. `FileMetricsLogger` needs
 called — so `ServiceLoader` instead discovers tiny `MetricsLoggerProvider`
 factories (each *does* have a no-arg constructor) that build the real
 logger with the right arguments on demand. This also means a future
-module (e.g. `filemetrics-prometheus`) can add its own logger —
-*and declare its own daemon needs* — without `filemetrics-core` ever
+module (e.g. `metrics-to-file-prometheus`) can add its own logger —
+*and declare its own daemon needs* — without `metrics-to-file-core` ever
 depending on it or needing to special-case it: it just ships its own
 provider + `META-INF/services` entry. (An earlier version of this
 had `Metrics` itself decide which daemons to start via `instanceof`

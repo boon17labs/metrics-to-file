@@ -1,4 +1,4 @@
-# filemetrics — Project Plan
+# metrics-to-file — Project Plan
 
 ## Background
 
@@ -11,9 +11,9 @@ The goal is a reusable open source library on GitHub.
 ## Project decisions
 
 ```
-Name:         filemetrics
-GitHub:       github.com/guranxp-sandbox/filemetrics
-Group id:     io.github.guranxp-sandbox
+Name:         metrics-to-file
+GitHub:       github.com/guranxp/metrics-to-file
+Group id:     io.github.guranxp
 Java minimum: 8 (bump to 21 in v2 once target apps upgrade)
 License:      Apache 2.0
 ```
@@ -22,7 +22,7 @@ License:      Apache 2.0
 
 ## API stability policy
 
-Public classes and methods in `filemetrics-core` are stable from v1.0.
+Public classes and methods in `metrics-to-file-core` are stable from v1.0.
 No breaking changes are introduced without a new major version.
 Internal classes (package `*.internal`) are not considered public API.
 
@@ -36,24 +36,24 @@ version bump — the API stays the same unless explicitly announced as broken.
 ## Module structure
 
 ```
-filemetrics-core              → JVM and custom metrics to file, no external dependencies
-filemetrics-prometheus        → Micrometer + Prometheus format, file and/or server
-filemetrics-spring            → Spring Boot autoconfiguration
-filemetrics-autoinstrument    → automatic instrumentation via reflection/aspects
+metrics-to-file-core              → JVM and custom metrics to file, no external dependencies
+metrics-to-file-prometheus        → Micrometer + Prometheus format, file and/or server
+metrics-to-file-spring            → Spring Boot autoconfiguration
+metrics-to-file-autoinstrument    → automatic instrumentation via reflection/aspects
 ```
 
 ### Dependencies between modules
 
 ```
-filemetrics-core          ← base, no external dependencies
-filemetrics-prometheus    → pulls in filemetrics-core + micrometer-core + micrometer-registry-prometheus
-filemetrics-spring        → pulls in filemetrics-core + spring-boot-actuator
-filemetrics-autoinstrument → pulls in filemetrics-core + micrometer-core
+metrics-to-file-core          ← base, no external dependencies
+metrics-to-file-prometheus    → pulls in metrics-to-file-core + micrometer-core + micrometer-registry-prometheus
+metrics-to-file-spring        → pulls in metrics-to-file-core + spring-boot-actuator
+metrics-to-file-autoinstrument → pulls in metrics-to-file-core + micrometer-core
 ```
 
 ---
 
-## filemetrics-core
+## metrics-to-file-core
 
 ### Purpose
 Collect JVM metrics and custom metrics and write them to file. No
@@ -120,7 +120,7 @@ java -jar app.jar
 The implementation is selected via ServiceLoader:
 
 ```
-src/main/resources/META-INF/services/io.github.guranxp-sandbox.filemetrics.MetricsLogger
+src/main/resources/META-INF/services/io.github.guranxp.metricstofile.MetricsLogger
 → contains all three implementations
 ```
 
@@ -192,7 +192,7 @@ Metrics.stop()        → clean up threads in teardown
 
 ---
 
-## filemetrics-prometheus
+## metrics-to-file-prometheus
 
 ### Purpose
 Prometheus format via Micrometer. Plugs into Micrometer as its own
@@ -247,7 +247,7 @@ jvm_threads_live_threads 94 1724580000000
 
 ---
 
-## filemetrics-spring
+## metrics-to-file-spring
 
 ### Purpose
 Zero-config integration with Spring Boot via autoconfiguration.
@@ -256,7 +256,7 @@ Zero-config integration with Spring Boot via autoconfiguration.
 
 ```
 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
-→ io.github.guranxp-sandbox.filemetrics.spring.MetricsAutoConfiguration
+→ io.github.guranxp.metricstofile.spring.MetricsAutoConfiguration
 ```
 
 ### Web server detection
@@ -302,7 +302,7 @@ metrics.enabled=false
 
 ---
 
-## filemetrics-autoinstrument
+## metrics-to-file-autoinstrument
 
 ### Purpose
 Automatic instrumentation of known libraries via reflection and Micrometer.
@@ -358,13 +358,13 @@ Fallback to noop if the file can't be created
 
 ## Next steps
 
-1. Set up GitHub repo (guranxp-sandbox/filemetrics) with Maven
+1. Set up GitHub repo (guranxp/metrics-to-file) with Maven
    multi-module structure
-2. Start with filemetrics-core
+2. Start with metrics-to-file-core
 3. Implement FileMetricsLogger
 4. Implement InMemoryMetricsLogger and NoOpMetricsLogger
 5. Add tests
-6. Build filemetrics-prometheus
-7. Build filemetrics-spring
-8. Build filemetrics-autoinstrument
+6. Build metrics-to-file-prometheus
+7. Build metrics-to-file-spring
+8. Build metrics-to-file-autoinstrument
 9. Documentation and README
