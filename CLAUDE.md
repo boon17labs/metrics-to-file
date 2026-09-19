@@ -142,6 +142,13 @@ files. See ARCHITECTURE.md for how they relate.
 - `metrics-to-file-spring`, `metrics-to-file-autoinstrument` — not
   started.
 
+## Roadmap
+
+The ordered roadmap and the open decisions are in
+`metricslibraryplan.md`, under "Next steps". Priority: file-based use
+cases first (the files may be the only data source); the `/metrics`
+server mode comes last.
+
 ## Workflow
 
 See WORKFLOW.md.

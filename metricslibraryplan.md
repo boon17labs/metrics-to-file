@@ -8,6 +8,22 @@ The goal is a reusable open source library on GitHub.
 
 ---
 
+## Use cases the design must serve
+
+1. Performance test (about 15 seconds up to several minutes) against an
+   app with request-handling problems (worker thread pool limits, slow
+   DB queries), then investigate the metrics to find the root cause.
+2. Long-running production monitoring of heap, memory and threads, plus
+   custom metrics (request counts, request times) — trends and min/max
+   over long periods.
+3. Deployments that cannot be reached in real time (remote sites, or no
+   access to production for a week or more): the metrics files are the
+   only data source, and are downloaded and investigated later. Scraping
+   `/metrics` is not possible there, so file mode comes first and must
+   be complete on its own.
+
+---
+
 ## Project decisions
 
 ```
@@ -381,6 +397,42 @@ ExecutorServiceMetrics.monitor(registry, pool, "zeromq-pool");
 
 ---
 
+## Design notes: what a snapshot interval can miss
+
+Metrics live in memory in the registry and are read when a snapshot is
+written (or, later, scraped).
+
+- Counters, timers (count/sum) and histograms are cumulative: nothing is
+  lost between snapshots, at any interval.
+- Gauges (heap used, live threads, custom gauges) store nothing; they are
+  evaluated when read, so events between two snapshots are lost.
+  Measured: a 2 s burst of 200 threads was invisible at a 10 s interval;
+  `jvm_threads_peak_threads` did catch it, because the JVM keeps a peak.
+- Timer `max` is kept only in a rolling window (Micrometer default: 2
+  minutes), so a coarse interval can miss a slow request.
+- Decision: sample fast, write slowly. Two independent settings: a
+  sample interval (for example 1–5 s), at which a sampler reads all
+  metrics and keeps the raw, timestamped samples in memory, and a write
+  interval (for example 1–5 minutes), at which the buffer is written to
+  the file in one batch. Losing up to one write interval on a crash is
+  accepted. The file holds raw samples, so min/max and trends are
+  calculated afterwards at any granularity. The file size depends only
+  on the sample interval, not on the write interval; batching only cuts
+  the number of writes (good for busy disks and flash storage). The
+  buffer is capped (a few MB) and flushed early when full. Min/max
+  aggregation may follow later as a compact mode for very long-term
+  storage.
+- Size: about 5 KB per sample — a 60 s sample interval ≈ 7 MB/day, 30 s
+  ≈ 15 MB/day, 10 s ≈ 44 MB/day, 5 s ≈ 88 MB/day, 1 s ≈ 430 MB/day.
+- Retention: `keepDays=7` keeps about a week, so anyone unable to reach
+  the machine for longer loses the oldest data. Cleanup is age-based
+  only; there is no size cap yet, so a fine interval plus a long absence
+  could fill the disk.
+- The JVM's own GC log (`-Xlog:gc*`, or `-Xloggc` on Java 8) records
+  every collection exactly and is a good complement.
+
+---
+
 ## General principles
 
 ```
@@ -396,15 +448,61 @@ Fallback to noop if the file can't be created
 
 ## Next steps
 
-1. Set up GitHub repo (boon17labs/metrics-to-file) with Maven
-   multi-module structure — done
-2. Start with metrics-to-file-core — done
-3. Implement FileMetricsLogger — done
-4. Implement InMemoryMetricsLogger and NoOpMetricsLogger — done
-5. Add tests — done
-6. Build metrics-to-file-prometheus — file mode done; server mode and
-   opt-in binders open
-7. Build metrics-to-file-spring — not started
-8. Build metrics-to-file-autoinstrument — not started
-9. Documentation and README — core and prometheus documented (README,
-   ARCHITECTURE.md, module README); the other modules as they are built
+Done: repo and Maven structure; core (loggers, `Metrics` facade, default
+and opt-in metrics, cleanup, file permissions, custom metrics);
+prometheus file mode (`PrometheusMetrics`); docs for both; CI on Java 8
+and 17.
+
+Roadmap, in order. File-based use cases come first (see "Use cases"):
+
+1. Sub-minute intervals by system property with units (`1s`, `500ms`,
+   `2m`; a plain number stays minutes), and validation: a zero interval
+   currently makes the daemon spin and a negative one kills its thread
+   (from reading the code) — warn and use the default instead. Shared
+   `BuilderProperties` in core, used by both modules.
+2. Separate sample interval and write interval, with an in-memory buffer
+   (see design notes): a sampler keeps raw timestamped samples, capped
+   at a few MB and flushed early when full; the buffer is written every
+   write interval, on `stop()` and in the shutdown hook (this is the
+   final snapshot), and by a public `PrometheusMetrics.snapshot()` that
+   samples and flushes immediately, to mark test phases. Both intervals
+   accept the units from step 1. The setting names are public API from
+   v1.0, so propose them and get approval before writing tests. Open:
+   whether core's `FileMetricsLogger` gets the same write batching. (The
+   first sample at start is taken before the app has registered its own
+   meters.)
+3. Maximum total size of the files (for example `metrics.max.size.mb`,
+   oldest deleted first, for `.log` and `.prom`) for unattended machines,
+   and documented `keepDays` guidance: set it well above the longest
+   period without access.
+4. Tooling to investigate the files ("Investigating files from
+   deployments"): a dependency-free Java converter shipped in the
+   prometheus jar (experimental) that turns `.prom` files into OpenMetrics
+   for `promtool tsdb create-blocks-from openmetrics` — UNVERIFIED, so
+   spike on a real file first (timestamps become seconds, `# EOF` added)
+   — plus docs for VictoriaMetrics import, generic `--label key=value` at
+   import (for example to tell sites apart), an optional docker-compose
+   plus Grafana dashboard as an example only, and possibly CSV export.
+5. `metrics-to-file-autoinstrument` (thread pools, DB pools, HTTP
+   clients) to find bottlenecks in performance tests; activation via
+   `AutoInstrument.enable()`. Until then a thread pool can be registered
+   by hand: `ExecutorServiceMetrics.monitor(registry, pool, name)`.
+6. Prometheus server mode (`/metrics`) — lowest priority, for users who
+   can scrape. Decisions so far: off unless a port is configured;
+   `metrics.prometheus.allowed.ips` defaults to loopback only and `*`
+   means anyone (the 403 response names the property); built on the JDK's
+   `com.sun.net.httpserver`, and if that is missing (it is not in the
+   Java SE specification, for example custom `jlink` images) warn and
+   start no server; no built-in authentication (document network
+   controls). The property and builder names are public API from v1.0,
+   so propose them and get approval before writing tests.
+7. `metrics-to-file-spring` — not started.
+8. Maven Central release readiness, before v1.0 is tagged: POM
+   `developers` and `scm`, sources and javadoc jars, artifact signing, a
+   release workflow, verification of the `io.github.boon17labs`
+   namespace. Versions are still 1.0.0-SNAPSHOT.
+
+Also open: opt-in binders (CPU, class loading) for the prometheus module,
+min/max aggregation as a compact long-term mode, optional extra common
+tags in the library, documenting which metrics are safe at coarse
+intervals, and opt-in logging of individual GC events.
