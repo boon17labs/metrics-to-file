@@ -9,7 +9,7 @@ import java.util.Map;
 public class NoOpMetricsLogger implements MetricsLogger {
 
     @Override
-    public void log(String type, Map<String, Object> values) {
+    public void log(final String type, final Map<String, Object> values) {
         // no-op
     }
 
