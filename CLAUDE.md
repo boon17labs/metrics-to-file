@@ -75,6 +75,13 @@ io.github.boon17labs.metricstofile.internal.file     ← file format/permissions
 io.github.boon17labs.metricstofile.internal.config   ← MetricsOptions, BuilderProperties
 ```
 
+`metrics-to-file-prometheus`:
+
+```
+io.github.boon17labs.metricstofile.prometheus          ← public API (PrometheusMetrics)
+io.github.boon17labs.metricstofile.prometheus.internal ← registry, snapshotter, formatter, writer, daemon
+```
+
 None of the `internal.*` sub-packages are public API — grouped by
 concept purely for navigability as the module grew past ~24 flat
 files. See ARCHITECTURE.md for how they relate.
@@ -114,6 +121,23 @@ files. See ARCHITECTURE.md for how they relate.
   `Metrics.log(type, values)` lets a host app log its own custom
   metric group through the same active logger — a no-op before
   `start()`.
+- `metrics-to-file-prometheus` — file mode done: `PrometheusMetrics`
+  (`start(appName)` / `builder()...start()`, `registry()`, `stop()`)
+  keeps a Micrometer `PrometheusMeterRegistry` with the default JVM
+  binders (memory, threads, GC), every meter tagged
+  `application=<appName>`, and appends a timestamped snapshot of it
+  (`# HELP`/`# TYPE` lines dropped) to `<appName>-<date>.prom` — once
+  at start, then per interval — via `PrometheusSnapshotter` →
+  `PrometheusSnapshotFormatter` → `PrometheusFileWriter`. A
+  `PrometheusWriteDaemon` (extending core's `IntervalDaemon`) and
+  core's `CleanupDaemon` (with the `.prom` suffix) run as daemon
+  threads; `stop()` joins both, then closes the registry, and a JVM
+  shutdown hook calls it. Same `metrics.log.dir`/`metrics.interval`/
+  `metrics.keep.days` fallbacks as core. Deliberately independent of
+  `MetricsLogger` and the provider SPI — see ARCHITECTURE.md. Not
+  started: HTTP `/metrics` server mode, opt-in binders.
+- `metrics-to-file-spring`, `metrics-to-file-autoinstrument` — not
+  started.
 
 ## Workflow
 

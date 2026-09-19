@@ -16,8 +16,12 @@ This project is early-stage and not yet published to Maven Central.
   `FileMetricsLogger`, and the `Metrics` facade (lifecycle,
   configuration, default + opt-in metric collection, log file
   cleanup, restricted file permissions).
-- `metrics-to-file-prometheus`, `metrics-to-file-spring`,
-  `metrics-to-file-autoinstrument` — not started.
+- `metrics-to-file-prometheus` — file mode done: JVM metrics in
+  Prometheus format, from a Micrometer registry, appended to a daily
+  file. The HTTP `/metrics` endpoint and opt-in binders are not
+  started. See its [README](metrics-to-file-prometheus/README.md).
+- `metrics-to-file-spring`, `metrics-to-file-autoinstrument` — not
+  started.
 
 ## Usage
 
@@ -88,13 +92,31 @@ request), aggregate a count/total/max yourself and call `log()`
 periodically, rather than once per event. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 
+## Prometheus format
+
+The `metrics-to-file-prometheus` module writes JVM metrics in
+Prometheus text format instead, from a Micrometer registry you can
+also register your own meters on:
+
+```java
+final PrometheusMetrics metrics = PrometheusMetrics.start("order-service");
+metrics.stop();
+```
+
+One line, and a timestamped snapshot is appended to
+`order-service-<date>.prom` every 60 minutes by default, with the same
+`metrics.log.dir` / `metrics.interval` / `metrics.keep.days` tuning as
+core. See the module's [README](metrics-to-file-prometheus/README.md)
+for the details.
+
 ## Modules
 
 ```
 metrics-to-file-core              → JVM and custom metrics to file, no
                                      external dependencies
 metrics-to-file-prometheus        → Micrometer + Prometheus format, file
-                                     and/or server
+                                     and/or server (file done, see its
+                                     README)
 metrics-to-file-spring            → Spring Boot autoconfiguration
 metrics-to-file-autoinstrument    → automatic instrumentation via
                                      reflection

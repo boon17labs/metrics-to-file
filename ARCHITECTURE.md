@@ -1,8 +1,9 @@
 # Architecture
 
 Conceptual overview of `metrics-to-file-core`: how metrics are collected,
-stored, and cleaned up, and how the threading model works. Not a
-line-by-line code walkthrough — see the source and its Javadoc for
+stored, and cleaned up, and how the threading model works — followed,
+at the end, by how `metrics-to-file-prometheus` fits on top of it. Not
+a line-by-line code walkthrough — see the source and its Javadoc for
 that. Update this file when the architecture itself changes, not on
 every small addition.
 
@@ -82,15 +83,18 @@ constructor to instantiate a provider. `FileMetricsLogger` needs
 `appName` and `logDir`, which aren't known until `Metrics.start()` is
 called — so `ServiceLoader` instead discovers tiny `MetricsLoggerProvider`
 factories (each *does* have a no-arg constructor) that build the real
-logger with the right arguments on demand. This also means a future
-module (e.g. `metrics-to-file-prometheus`) can add its own logger —
-*and declare its own daemon needs* — without `metrics-to-file-core` ever
-depending on it or needing to special-case it: it just ships its own
-provider + `META-INF/services` entry. (An earlier version of this
+logger with the right arguments on demand. This also means another
+module can add its own logger — *and declare its own daemon needs* —
+without `metrics-to-file-core` ever depending on it or needing to
+special-case it: it just ships its own provider + `META-INF/services`
+entry. (An earlier version of this
 had `Metrics` itself decide which daemons to start via `instanceof`
 checks against concrete logger types — that would have meant
 modifying core every time a new module needed different background
 behavior, quietly defeating the whole point of the provider SPI.)
+
+`metrics-to-file-prometheus` deliberately does not use this route; see
+[The Prometheus module](#the-prometheus-module) for why.
 
 ## Collecting a metric: built-in vs. custom
 
@@ -287,3 +291,101 @@ no redeploy, even when the app itself only ever calls the one-line
 `Metrics.start("app-name")`. An invalid property value (e.g.
 `metrics.interval=abc`) is warned to stderr and the default wins —
 never throws.
+
+## The Prometheus module
+
+`metrics-to-file-prometheus` writes the same kind of history as core's
+`FileMetricsLogger`, but in Prometheus text format and from a Micrometer
+registry instead of from core's collectors. Its usage is in the
+[module README](metrics-to-file-prometheus/README.md); this is how it is
+put together:
+
+```
+PrometheusMetrics.start("app")       (or builder()...start())
+        │
+        ├─▶ JvmMetricsRegistry        Micrometer PrometheusMeterRegistry +
+        │        ▲                    JVM binders (memory, threads, GC),
+        │        │                    every meter tagged application=<app>
+        │        │ scrape()
+        ├─▶ PrometheusWriteDaemon ─▶ PrometheusSnapshotter
+        │   (IntervalDaemon)              │
+        │                                 ▼
+        │                    PrometheusSnapshotFormatter
+        │                    (drop # lines, append timestamp)
+        │                                 │
+        │                                 ▼
+        │                    PrometheusFileWriter ─▶ <app>-<date>.prom
+        │
+        └─▶ CleanupDaemon (from core, suffix ".prom")
+```
+
+### Why a separate entry point, not a `MetricsLogger`
+
+Core's abstraction is `log(type, Map)` — one flat metric group at a time,
+fed by core's own collection loop. A Micrometer registry does not work
+that way: it owns its meters and is read as a whole with `scrape()`. So
+this module does not implement a `MetricsLogger` or a
+`MetricsLoggerProvider`, and `metrics.implementation` does not apply to
+it. `PrometheusMetrics` has its own `start`/`stop`, its own daemon, and
+the two facades can run side by side in one application: their files
+differ by suffix (`.log` and `.prom`), and each cleanup only touches its
+own.
+
+### What it reuses from core
+
+All of it is `internal` to core — not public API, but safe to use across
+modules because they always release together at the same version:
+
+- `IntervalDaemon` — the tick-then-sleep loop with prompt shutdown.
+  Extended by `PrometheusWriteDaemon`; it was made public and its
+  `tick()` protected for exactly this.
+- `CleanupDaemon` / `LogFileCleaner` — deleting files older than
+  `keepDays`. They take a file suffix (default `.log`), so the same code
+  cleans `.prom` files.
+- `BuilderProperties` — the builder value → `metrics.*` property →
+  default resolution, so the properties are shared with core.
+- `FilePermissions` — owner-only read/write on new files.
+
+### The snapshot pipeline
+
+Each tick is three small steps, each in its own class so it can be
+tested on its own:
+
+1. `PrometheusSnapshotter` reads the clock, then calls `scrape()` on the
+   registry. It depends only on a `PrometheusMeterRegistry`, not on how
+   it was made, so a registry that comes from somewhere else (for
+   example Spring's) can be plugged in later. Any failure is warned
+   about on stderr, never thrown.
+2. `PrometheusSnapshotFormatter` turns the scrape into sample lines. It
+   drops `# HELP` / `# TYPE` / blank lines, so snapshots can be appended
+   into one history file without repeating metadata, and appends the
+   snapshot time in epoch milliseconds at the very end of each line, so
+   label values with spaces or braces never need parsing.
+3. `PrometheusFileWriter` appends the lines to the daily file: created
+   with owner-only permissions, written as UTF-8 (what the Prometheus
+   format specifies) in a single write per snapshot, and `synchronized`
+   so batches from different threads never interleave.
+
+### Public API
+
+Only `PrometheusMetrics` and its `Builder`. `registry()` returns the
+general `io.micrometer.core.instrument.MeterRegistry` rather than the
+Prometheus-specific class, because Micrometer 1.13 moved that class to
+a different package — returning the stable type keeps the public API
+independent of that.
+
+### Threading and shutdown
+
+Two daemon threads, like core: the write daemon and a cleanup daemon,
+on the same interval. The first snapshot is taken immediately at start,
+then one per interval; there is no final snapshot at `stop()`.
+
+`stop()` signals both threads, joins both (bounded to 5s each) and only
+then closes the registry, so a snapshot is never taken from a closed
+registry and no write is left in flight when it returns. Unlike core's
+single static `Metrics`, each `PrometheusMetrics` is an independent
+instance, so each registers its own JVM shutdown hook at start and
+removes it again in `stop()`. When the hook itself is what calls `stop()`
+the JVM is already shutting down, where `Runtime.removeShutdownHook`
+throws `IllegalStateException`; `stop()` catches it. That case is covered
+by a test that lets a child JVM exit without stopping.
