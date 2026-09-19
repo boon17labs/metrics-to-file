@@ -30,6 +30,10 @@ import java.time.Duration;
  * {@code metrics.keep.days}), then to the defaults: {@code ./metrics}, 60
  * minutes, 7 days.
  *
+ * <p>A JVM shutdown hook calls {@link #stop()} automatically, so an app that
+ * never calls it explicitly still shuts down cleanly. The hook is removed
+ * again by an explicit {@code stop()}.
+ *
  * <p>A metrics problem never affects the host application: failures are
  * warned about on stderr and never thrown, the one exception being a missing
  * app name, which is a programming error. Each call to {@code start} creates
@@ -43,6 +47,8 @@ public final class PrometheusMetrics {
     private final JvmMetricsRegistry jvmRegistry;
     private final PrometheusWriteDaemon writeDaemon;
     private final CleanupDaemon cleanupDaemon;
+    private final Thread shutdownHook =
+            new Thread(this::stop, "metrics-to-file-prometheus-shutdown-hook");
     private boolean stopped;
 
     private PrometheusMetrics(final JvmMetricsRegistry jvmRegistry,
@@ -79,6 +85,7 @@ public final class PrometheusMetrics {
             return;
         }
         stopped = true;
+        removeShutdownHook();
         // Stop the threads before closing the registry, so no snapshot is
         // ever taken from a closed registry.
         writeDaemon.shutdown();
@@ -86,6 +93,28 @@ public final class PrometheusMetrics {
         joinQuietly(writeDaemon);
         joinQuietly(cleanupDaemon);
         jvmRegistry.close();
+    }
+
+    // Package-private so tests can reach the hook; not public API.
+    Thread shutdownHook() {
+        return shutdownHook;
+    }
+
+    private void registerShutdownHook() {
+        try {
+            Runtime.getRuntime().addShutdownHook(shutdownHook);
+        } catch (final IllegalStateException e) {
+            // The JVM is already shutting down, so there is nothing to hook into.
+        }
+    }
+
+    private void removeShutdownHook() {
+        try {
+            Runtime.getRuntime().removeShutdownHook(shutdownHook);
+        } catch (final IllegalStateException e) {
+            // Hooks cannot be removed once the JVM is shutting down. That is exactly
+            // when the hook itself calls stop(), so this is expected and harmless.
+        }
     }
 
     private static void joinQuietly(final Thread thread) {
@@ -109,7 +138,9 @@ public final class PrometheusMetrics {
                 logDir, appName, keepDays, interval.toMillis(), PrometheusFileWriter.SUFFIX);
         writeDaemon.start();
         cleanupDaemon.start();
-        return new PrometheusMetrics(jvmRegistry, writeDaemon, cleanupDaemon);
+        final PrometheusMetrics metrics = new PrometheusMetrics(jvmRegistry, writeDaemon, cleanupDaemon);
+        metrics.registerShutdownHook();
+        return metrics;
     }
 
     /**
