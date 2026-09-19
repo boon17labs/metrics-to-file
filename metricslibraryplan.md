@@ -310,8 +310,13 @@ Automatic instrumentation of known libraries via reflection and Micrometer.
 ### Activation
 
 ```java
-Metrics.start("order-service").autoInstrument();
+Metrics.start("order-service");
+AutoInstrument.enable();
 ```
+
+`AutoInstrument` lives in `metrics-to-file-autoinstrument`, so
+`metrics-to-file-core` needs no handle returned from `Metrics.start()`
+and its public API stays untouched.
 
 ### What gets instrumented automatically
 
