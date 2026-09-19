@@ -22,9 +22,13 @@ License:      Apache 2.0
 
 ## API stability policy
 
-Public classes and methods in `metrics-to-file-core` are stable from v1.0.
-No breaking changes are introduced without a new major version.
-Internal classes (package `*.internal`) are not considered public API.
+Public classes and methods in all modules are stable from v1.0. No
+breaking changes are introduced without a new major version.
+Internal classes (the `internal` package and every sub-package under
+it) are not considered public API. This covers this project's own
+classes; types from other libraries that appear in a signature (for
+example Micrometer's `MeterRegistry`) follow that library's own
+compatibility.
 
 Consequence for users: upgrading from v1.x to v1.y never
 requires code changes — just an updated version number in pom.xml.
@@ -195,22 +199,34 @@ Metrics.stop()        → clean up threads in teardown
 ## metrics-to-file-prometheus
 
 ### Purpose
-Prometheus format via Micrometer. Plugs into Micrometer as its own
-MeterRegistry.
+Prometheus format via Micrometer. Keeps a Micrometer registry that the
+application (and the other modules) can register meters on.
+
+### Status
+File mode is done. Server mode and the opt-in binders are not started.
+
+### Entry point
+Its own `PrometheusMetrics` — `start("app")` or `builder()...start()` —
+independent of `Metrics` in core: it does not use `metrics.implementation`
+or the `MetricsLogger` / provider SPI. `registry()` returns the
+Micrometer `MeterRegistry`; `stop()` stops it. See ARCHITECTURE.md.
 
 ### Modes
 
 ```
-File mode    → Prometheus format to file, default
-Server mode  → HTTP endpoint /metrics, requires configuration
-Both         → file + server simultaneously
+File mode    → Prometheus format to file (done)
+Server mode  → HTTP endpoint /metrics, requires configuration (planned)
+Both         → file + server simultaneously (planned)
 ```
 
 ### File mode
-Works out of the box with no configuration — default if no port is set.
+Done. Works out of the box with no configuration: one call to `start`
+writes a timestamped snapshot to a daily file at start and then once per
+interval, with the same `metrics.log.dir`, `metrics.interval` and
+`metrics.keep.days` tuning as core.
 
 ### Server mode
-Only starts if explicitly configured:
+Planned. Only starts if explicitly configured:
 
 ```
 metrics.prometheus.port=9090
@@ -221,12 +237,23 @@ If not configured → no server, the app is unaffected.
 
 ### Configuration
 
+File mode reuses core's properties — an explicit builder value wins,
+then the property, then the default:
+
+```
+metrics.log.dir=./metrics
+metrics.interval=60
+metrics.keep.days=7
+```
+
+The `metrics.prometheus.*` namespace is reserved for the server mode
+(planned), where it will also decide whether the file is written too:
+
 ```
 metrics.prometheus.mode=file|server|both
 metrics.prometheus.port=9090
 metrics.prometheus.allowed.ips=127.0.0.1
 metrics.prometheus.file.enabled=true
-metrics.prometheus.file.dir=/var/log/metrics
 ```
 
 ### Web server with no extra dependency
@@ -238,12 +265,18 @@ HttpServer server = HttpServer.create(new InetSocketAddress(9090), 0);
 
 ### File format
 
-Prometheus format with a timestamp per metric:
+One file per day, `<app>-<yyyy-MM-dd>.prom`. Prometheus format with a
+timestamp per sample (epoch milliseconds) and an `application` label on
+every sample:
 
 ```
-jvm_memory_used_bytes{area="heap"} 327155712 1724580000000
-jvm_threads_live_threads 94 1724580000000
+jvm_memory_used_bytes{application="order-service",area="heap",id="G1 Old Gen"} 1573480.0 1789807921221
+jvm_threads_live_threads{application="order-service"} 8.0 1789807921221
 ```
+
+`# HELP` and `# TYPE` lines are left out, so snapshots can be appended
+into one history file. Default metrics: memory, threads and GC; opt-in
+binders (CPU, class loading) are planned.
 
 ---
 
@@ -364,12 +397,14 @@ Fallback to noop if the file can't be created
 ## Next steps
 
 1. Set up GitHub repo (boon17labs/metrics-to-file) with Maven
-   multi-module structure
-2. Start with metrics-to-file-core
-3. Implement FileMetricsLogger
-4. Implement InMemoryMetricsLogger and NoOpMetricsLogger
-5. Add tests
-6. Build metrics-to-file-prometheus
-7. Build metrics-to-file-spring
-8. Build metrics-to-file-autoinstrument
-9. Documentation and README
+   multi-module structure — done
+2. Start with metrics-to-file-core — done
+3. Implement FileMetricsLogger — done
+4. Implement InMemoryMetricsLogger and NoOpMetricsLogger — done
+5. Add tests — done
+6. Build metrics-to-file-prometheus — file mode done; server mode and
+   opt-in binders open
+7. Build metrics-to-file-spring — not started
+8. Build metrics-to-file-autoinstrument — not started
+9. Documentation and README — core and prometheus documented (README,
+   ARCHITECTURE.md, module README); the other modules as they are built

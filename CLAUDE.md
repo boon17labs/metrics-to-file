@@ -21,10 +21,13 @@ License:      Apache 2.0
 
 ## API stability policy
 
-Public classes and methods in `metrics-to-file-core` are stable from v1.0.
-No breaking changes are introduced without a new major version.
+Public classes and methods in all modules are stable from v1.0. No
+breaking changes are introduced without a new major version.
 Internal classes (the `internal` package and every sub-package under
-it) are not considered public API.
+it) are not considered public API. This covers this project's own
+classes; types from other libraries that appear in a signature (for
+example Micrometer's `MeterRegistry`) follow that library's own
+compatibility.
 
 ## Module structure
 
