@@ -34,7 +34,7 @@ public final class MetricsCollectionDaemon extends IntervalDaemon {
     }
 
     @Override
-    void tick() {
+    protected void tick() {
         for (final MetricsCollector collector : collectors) {
             for (final Map<String, Object> values : collector.collect()) {
                 logger.log(collector.type(), values);

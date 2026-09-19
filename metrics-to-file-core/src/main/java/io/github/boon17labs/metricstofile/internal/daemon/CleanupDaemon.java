@@ -33,7 +33,7 @@ public final class CleanupDaemon extends IntervalDaemon {
     }
 
     @Override
-    void tick() {
+    protected void tick() {
         LogFileCleaner.clean(logDir, appName, keepDays, suffix);
     }
 }

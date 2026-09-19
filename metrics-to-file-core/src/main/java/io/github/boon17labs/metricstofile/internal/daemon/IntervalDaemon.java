@@ -4,13 +4,16 @@ package io.github.boon17labs.metricstofile.internal.daemon;
  * Daemon thread that repeats {@link #tick()} on a fixed interval until
  * {@link #shutdown()} is called, interrupting an in-progress sleep so
  * shutdown is prompt even with a long interval.
+ *
+ * <p>Public so other metrics-to-file modules can extend it. Like the
+ * rest of {@code internal}, it is not public API.
  */
-abstract class IntervalDaemon extends Thread {
+public abstract class IntervalDaemon extends Thread {
 
     private final long intervalMillis;
     private volatile boolean running = true;
 
-    IntervalDaemon(final String name, final long intervalMillis) {
+    protected IntervalDaemon(final String name, final long intervalMillis) {
         super(name);
         this.intervalMillis = intervalMillis;
         setDaemon(true);
@@ -24,7 +27,7 @@ abstract class IntervalDaemon extends Thread {
         }
     }
 
-    abstract void tick();
+    protected abstract void tick();
 
     public final void shutdown() {
         running = false;
