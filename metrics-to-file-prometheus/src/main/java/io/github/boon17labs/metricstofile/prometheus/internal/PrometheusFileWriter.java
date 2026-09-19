@@ -23,7 +23,8 @@ import java.util.List;
  */
 public final class PrometheusFileWriter {
 
-    private static final String SUFFIX = ".prom";
+    /** File name suffix of the daily files; the cleanup of old files must use the same one. */
+    public static final String SUFFIX = ".prom";
 
     private final String appName;
     private final File logDir;
