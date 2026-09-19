@@ -37,6 +37,27 @@ class CleanupDaemonIT {
     }
 
     @Test
+    void shouldDeleteOldFilesWithGivenSuffixShortlyAfterStarting(@TempDir final File logDir)
+            throws Exception {
+        // given
+        final File oldFile = new File(logDir, "order-service-" + LocalDate.now().minusDays(30) + ".prom");
+        assertTrue(oldFile.createNewFile());
+        final CleanupDaemon daemon =
+                new CleanupDaemon(logDir, "order-service", 7, SHORT_INTERVAL_MILLIS, ".prom");
+
+        // when
+        daemon.start();
+        try {
+            waitUntil(() -> !oldFile.exists());
+        } finally {
+            daemon.shutdown();
+        }
+
+        // then
+        assertFalse(oldFile.exists());
+    }
+
+    @Test
     void shouldRunAsDaemonThread(@TempDir final File logDir) {
         // given
         final CleanupDaemon daemon =

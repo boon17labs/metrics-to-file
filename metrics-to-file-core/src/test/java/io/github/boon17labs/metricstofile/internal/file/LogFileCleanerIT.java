@@ -66,6 +66,46 @@ class LogFileCleanerIT {
     }
 
     @Test
+    void shouldDeleteOldFilesWithGivenSuffix(@TempDir final File logDir) throws IOException {
+        // given
+        final File oldFile =
+                fileFor(logDir, "order-service", LocalDate.now().minusDays(10), ".prom");
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, ".prom");
+
+        // then
+        assertFalse(oldFile.exists());
+    }
+
+    @Test
+    void shouldKeepOldFilesWithOtherSuffixWhenSuffixIsGiven(@TempDir final File logDir)
+            throws IOException {
+        // given
+        final File oldLogFile = fileFor(logDir, "order-service", LocalDate.now().minusDays(10));
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, ".prom");
+
+        // then
+        assertTrue(oldLogFile.exists());
+    }
+
+    @Test
+    void shouldKeepOldFilesWithOtherSuffixWhenSuffixIsDefaulted(@TempDir final File logDir)
+            throws IOException {
+        // given
+        final File oldPromFile =
+                fileFor(logDir, "order-service", LocalDate.now().minusDays(10), ".prom");
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS);
+
+        // then
+        assertTrue(oldPromFile.exists());
+    }
+
+    @Test
     void shouldNotThrowWhenDirectoryDoesNotExist(@TempDir final File tempDir) {
         // given
         final File missingDir = new File(tempDir, "does-not-exist");
@@ -81,7 +121,12 @@ class LogFileCleanerIT {
 
     private static File fileFor(final File logDir, final String appName, final LocalDate date)
             throws IOException {
-        final File file = new File(logDir, appName + "-" + date + ".log");
+        return fileFor(logDir, appName, date, ".log");
+    }
+
+    private static File fileFor(final File logDir, final String appName, final LocalDate date,
+            final String suffix) throws IOException {
+        final File file = new File(logDir, appName + "-" + date + suffix);
         assertTrue(file.createNewFile());
         return file;
     }
