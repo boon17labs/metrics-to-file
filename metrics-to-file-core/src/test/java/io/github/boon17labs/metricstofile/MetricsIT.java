@@ -28,7 +28,8 @@ class MetricsIT {
         Metrics.stop();
         System.clearProperty("metrics.implementation");
         System.clearProperty("metrics.log.dir");
-        System.clearProperty("metrics.interval");
+        System.clearProperty("metrics.write.interval");
+        System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
         System.clearProperty("metrics.opt.direct");
         System.clearProperty("metrics.opt.classloading");
@@ -157,7 +158,7 @@ class MetricsIT {
         Metrics.builder()
                 .appName("order-service")
                 .logDir(logDir.getAbsolutePath())
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .keepDays(7)
                 .start();
 
@@ -217,6 +218,30 @@ class MetricsIT {
     }
 
     @Test
+    void shouldNotThrowWhenSnapshotCalledBeforeStarting() {
+        assertDoesNotThrow(Metrics::snapshot);
+    }
+
+    @Test
+    void shouldSampleAndWriteImmediatelyOnSnapshot() throws InterruptedException {
+        // given: a sample/write interval long enough that only snapshot() can add an entry
+        System.setProperty("metrics.implementation", "inmemory");
+        Metrics.builder()
+                .appName("order-service")
+                .writeInterval(Duration.ofMinutes(60L))
+                .sampleInterval(Duration.ofMinutes(60L))
+                .start();
+        waitUntil(() -> entryCount() >= 1);
+        final long before = entriesOfType("heap");
+
+        // when
+        Metrics.snapshot();
+
+        // then
+        assertEquals(before + 1, entriesOfType("heap"));
+    }
+
+    @Test
     void shouldThrowWhenBuilderStartedWithoutAppName() {
         assertThrows(IllegalStateException.class, () -> Metrics.builder().start());
     }
@@ -229,7 +254,7 @@ class MetricsIT {
         // when
         Metrics.builder()
                 .appName("order-service")
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then
@@ -246,7 +271,7 @@ class MetricsIT {
         Metrics.builder()
                 .appName("order-service")
                 .logDir(logDir.getAbsolutePath())
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then
@@ -261,7 +286,7 @@ class MetricsIT {
         // when
         Metrics.builder()
                 .appName("order-service")
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then
@@ -281,7 +306,7 @@ class MetricsIT {
         // when
         Metrics.builder()
                 .appName("order-service")
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .withDirectMemory()
                 .withClassLoading()
                 .withCpu()
@@ -309,7 +334,7 @@ class MetricsIT {
         // when
         Metrics.builder()
                 .appName("order-service")
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then
@@ -330,7 +355,7 @@ class MetricsIT {
         Metrics.builder()
                 .appName("order-service")
                 .logDir(logDir.getAbsolutePath())
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then
@@ -351,7 +376,7 @@ class MetricsIT {
         // when
         Metrics.builder()
                 .appName("order-service")
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // then

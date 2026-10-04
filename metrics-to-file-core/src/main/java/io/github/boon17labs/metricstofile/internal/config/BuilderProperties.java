@@ -13,7 +13,8 @@ import java.time.Duration;
 public final class BuilderProperties {
 
     private static final String LOG_DIR_PROPERTY = "metrics.log.dir";
-    private static final String INTERVAL_PROPERTY = "metrics.interval";
+    private static final String WRITE_INTERVAL_PROPERTY = "metrics.write.interval";
+    private static final String SAMPLE_INTERVAL_PROPERTY = "metrics.sample.interval";
     private static final String KEEP_DAYS_PROPERTY = "metrics.keep.days";
 
     private static final String DEFAULT_LOG_DIR = "./metrics";
@@ -32,31 +33,52 @@ public final class BuilderProperties {
         return value == null ? new File(DEFAULT_LOG_DIR) : new File(value);
     }
 
-    public static Duration interval(final Duration explicit) {
+    /**
+     * How often the in-memory buffer is written to file. Defaults to 60
+     * minutes when neither the builder nor {@code metrics.write.interval}
+     * set it.
+     */
+    public static Duration writeInterval(final Duration explicit) {
+        return resolveInterval(explicit, WRITE_INTERVAL_PROPERTY, DEFAULT_INTERVAL);
+    }
+
+    /**
+     * How often metrics are read into the in-memory buffer. Defaults to
+     * the resolved {@code writeInterval} when neither the builder nor
+     * {@code metrics.sample.interval} set it, so an app that never
+     * touches this setting keeps today's behaviour: one sample taken
+     * right at write time, no buffering lag.
+     */
+    public static Duration sampleInterval(final Duration explicit, final Duration writeInterval) {
+        return resolveInterval(explicit, SAMPLE_INTERVAL_PROPERTY, writeInterval);
+    }
+
+    private static Duration resolveInterval(final Duration explicit, final String propertyName,
+            final Duration fallback) {
         if (explicit != null) {
             if (!isPositive(explicit)) {
                 System.err.println("[metrics-to-file] invalid interval '" + explicit
                         + "', must be positive, using default");
-                return DEFAULT_INTERVAL;
+                return fallback;
             }
             return explicit;
         }
-        final String value = System.getProperty(INTERVAL_PROPERTY);
+        final String value = System.getProperty(propertyName);
         if (value == null) {
-            return DEFAULT_INTERVAL;
+            return fallback;
         }
         try {
             final Duration parsed = parseInterval(value.trim());
             if (!isPositive(parsed)) {
-                System.err.println("[metrics-to-file] invalid " + INTERVAL_PROPERTY + " '"
+                System.err.println("[metrics-to-file] invalid " + propertyName + " '"
                         + value + "', must be positive, using default");
-                return DEFAULT_INTERVAL;
+                return fallback;
             }
             return parsed;
         } catch (final NumberFormatException e) {
-            System.err.println("[metrics-to-file] invalid " + INTERVAL_PROPERTY + " '"
+            System.err.println("[metrics-to-file] invalid " + propertyName + " '"
                     + value + "', using default");
-            return DEFAULT_INTERVAL;
+            return fallback;
         }
     }
 

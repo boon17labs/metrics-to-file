@@ -103,42 +103,57 @@ files. See ARCHITECTURE.md for how they relate.
   daemon plus any thread calling `Metrics.log()` — never interleave
   writes)
 - `Metrics` (facade/entry point) — done: `start(appName)` and
-  `builder().appName(...).logDir(...).interval(Duration)
-  .keepDays(...).withDirectMemory()...start()` resolve a
-  `MetricsLogger` via ServiceLoader (`metrics.implementation`), then
-  start only the daemon threads that implementation's provider
+  `builder().appName(...).logDir(...).sampleInterval(Duration)
+  .writeInterval(Duration).keepDays(...).withDirectMemory()...start()`
+  resolve a `MetricsLogger` via ServiceLoader (`metrics.implementation`),
+  then start only the daemon threads that implementation's provider
   declares it needs
   (`internal.provider.MetricsLoggerProvider.requirements()` →
   `internal.provider.DaemonRequirements`) — `NoOpMetricsLogger` needs
   neither, `InMemoryMetricsLogger` needs only collection,
   `FileMetricsLogger` needs both, so an unconfigured app runs no
-  background threads at all. Any builder field left unset falls back
-  to its matching `metrics.*` system property (`metrics.log.dir`,
-  `metrics.interval` in minutes, `metrics.keep.days`,
+  background threads at all. `MetricsCollectionDaemon` samples the
+  active collectors into an in-memory buffer
+  (`internal.buffer.TimestampedSample`) every `sampleInterval`, and
+  flushes that buffer — one file open/write/close via
+  `FileMetricsLogger.logBatch(...)` — every `writeInterval`, early if
+  the buffer fills, on `stop()`, or on demand via `Metrics.snapshot()`.
+  `sampleInterval` defaults to the resolved `writeInterval`, so an app
+  that never sets it keeps the original one-sample-per-write
+  behaviour. Any builder field left unset falls back to its matching
+  `metrics.*` system property (`metrics.log.dir`, `metrics.sample.interval`
+  and `metrics.write.interval` in minutes or with a unit suffix
+  (`500ms`/`30s`/`2m`), `metrics.keep.days`,
   `metrics.opt.direct`/`classloading`/`cpu`/`codecache`/`process`), then to the
   documented default — see `internal.config.BuilderProperties`.
-  `Metrics.stop()` shuts down whichever daemons are running, joining each
-  (bounded, 5s) so no write is left in flight before it returns, and
-  a JVM shutdown hook calls it automatically so an app that never
-  calls `stop()` explicitly still shuts down cleanly.
-  `Metrics.log(type, values)` lets a host app log its own custom
-  metric group through the same active logger — a no-op before
-  `start()`.
+  `Metrics.stop()` flushes any buffered samples, then shuts down
+  whichever daemons are running, joining each (bounded, 5s) so no
+  write is left in flight before it returns, and a JVM shutdown hook
+  calls it automatically so an app that never calls `stop()` explicitly
+  still shuts down cleanly. `Metrics.log(type, values)` lets a host app
+  log its own custom metric group through the same active logger — a
+  no-op before `start()`, and always written immediately, unaffected
+  by the collection buffer.
 - `metrics-to-file-prometheus` — file mode done: `PrometheusMetrics`
-  (`start(appName)` / `builder()...start()`, `registry()`, `stop()`)
-  keeps a Micrometer `PrometheusMeterRegistry` with the default JVM
-  binders (memory, threads, GC), every meter tagged
-  `application=<appName>`, and appends a timestamped snapshot of it
-  (`# HELP`/`# TYPE` lines dropped) to `<appName>-<date>.prom` — once
-  at start, then per interval — via `PrometheusSnapshotter` →
-  `PrometheusSnapshotFormatter` → `PrometheusFileWriter`. A
+  (`start(appName)` / `builder()...start()`, `registry()`, `snapshot()`,
+  `stop()`) keeps a Micrometer `PrometheusMeterRegistry` with the
+  default JVM binders (memory, threads, GC), every meter tagged
+  `application=<appName>`, and samples it (`# HELP`/`# TYPE` lines
+  dropped) into an in-memory line buffer every `sampleInterval`, via
+  `PrometheusSnapshotter.sample()` → `PrometheusSnapshotFormatter`.
+  That buffer is flushed to `<appName>-<date>.prom` via
+  `PrometheusSnapshotter.flush(...)` → `PrometheusFileWriter` every
+  `writeInterval` — once at start, then per write interval, early if
+  the buffer fills, on `stop()`, or on demand via `snapshot()`. A
   `PrometheusWriteDaemon` (extending core's `IntervalDaemon`) and
-  core's `CleanupDaemon` (with the `.prom` suffix) run as daemon
-  threads; `stop()` joins both, then closes the registry, and a JVM
-  shutdown hook calls it. Same `metrics.log.dir`/`metrics.interval`/
-  `metrics.keep.days` fallbacks as core. Deliberately independent of
-  `MetricsLogger` and the provider SPI — see ARCHITECTURE.md. Not
-  started: HTTP `/metrics` server mode, opt-in binders.
+  core's `CleanupDaemon` (with the `.prom` suffix, on the write
+  interval's cadence) run as daemon threads; `stop()` flushes the
+  buffer, joins both, then closes the registry, and a JVM shutdown
+  hook calls it. Same `metrics.log.dir`/`metrics.sample.interval`/
+  `metrics.write.interval`/`metrics.keep.days` fallbacks as core.
+  Deliberately independent of `MetricsLogger` and the provider SPI —
+  see ARCHITECTURE.md. Not started: HTTP `/metrics` server mode,
+  opt-in binders.
 - `metrics-to-file-spring`, `metrics-to-file-autoinstrument` — not
   started.
 

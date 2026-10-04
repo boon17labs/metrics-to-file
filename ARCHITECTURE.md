@@ -211,21 +211,40 @@ daemon sleeping through a long interval still stops promptly rather
 than waiting out the full sleep. Both daemons are marked as JVM
 daemon threads, so they never keep the JVM alive on their own.
 
-- `MetricsCollectionDaemon.tick()` — loops over the active collector
-  list and logs every group each one returns.
+- `MetricsCollectionDaemon.tick()` — samples the active collector list
+  into an in-memory buffer every sample interval, flushing that buffer
+  (writing every buffered sample to the logger) whenever the write
+  interval has elapsed since the last flush, or the buffer is full. A
+  single-interval constructor overload treats sample and write as the
+  same value, giving today's one-sample-per-write behaviour as the
+  default when `sampleInterval` is never set.
 - `CleanupDaemon.tick()` — runs `LogFileCleaner.clean(...)` once.
 
 Neither daemon is started unless the resolved logger's
 `DaemonRequirements` says it's needed (see above) — a `NoOpMetricsLogger`
 runs no background threads at all, `InMemoryMetricsLogger` only runs
 collection, only `FileMetricsLogger` runs both. When both do run,
-they run on the *same* interval (`Metrics.builder().interval(...)`)
+cleanup runs on the *write* interval (`Metrics.builder().writeInterval(...)`)
 — there's no separate cleanup frequency, since none is documented and
-reusing one interval keeps the configuration surface smaller.
+reusing the write interval keeps the configuration surface smaller.
 
-`Metrics.stop()` shuts down whichever daemons are running and closes
-the active logger. Critically, it also **joins** each running daemon
-(bounded to 5s)
+Each buffered reading is an `internal.buffer.TimestampedSample` (the
+type, values, and the `Instant` it was actually sampled at — not the
+later moment it happens to be flushed). On flush, if the active logger
+is a `FileMetricsLogger`, the whole batch goes through its
+`logBatch(...)`, opening the file once and writing every line in one
+pass; any other logger (`InMemoryMetricsLogger`) just gets `log(...)`
+called once per sample, in order, since there's no real I/O cost to
+batch there. The buffer is capped at a fixed number of samples
+(flushing early if reached) so a write interval set far longer than
+the sample interval cannot grow memory without bound — an internal
+constant, not yet configurable. `Metrics.log(type, values)` (custom
+metrics) is unaffected by any of this: it always calls `log(...)`
+directly, immediately, with no buffering.
+
+`Metrics.stop()` shuts down whichever daemons are running — flushing
+any buffered samples first — and closes the active logger. Critically,
+it also **joins** each running daemon (bounded to 5s)
 before returning — `shutdown()` alone only requests termination, it
 doesn't wait for it. Without the join, `stop()` could return while a
 daemon was still mid-`tick()`, actively writing a file. This was a
@@ -253,7 +272,8 @@ configuration:
 |--------------------------|--------------------------------------|
 | `metrics.implementation` | `noop` (discards until set to `file`/`inmemory`) |
 | log directory            | `./metrics`                         |
-| collection interval      | 60 minutes                          |
+| sample interval          | same as write interval              |
+| write interval           | 60 minutes                          |
 | retention (`keepDays`)   | 7 days                              |
 | opt-in metrics           | all off (direct memory, classloading, CPU, code cache, process memory) |
 
@@ -277,7 +297,8 @@ order):
 | Field                | System property           | Format                |
 |----------------------|----------------------------|-----------------------|
 | `logDir`             | `metrics.log.dir`          | a path                |
-| `interval`           | `metrics.interval`         | whole minutes (e.g. `15`), or with a unit suffix: `500ms`, `30s`, `2m` |
+| `sampleInterval`     | `metrics.sample.interval`  | whole minutes (e.g. `15`), or with a unit suffix: `500ms`, `30s`, `2m`; defaults to the resolved `writeInterval` |
+| `writeInterval`      | `metrics.write.interval`   | same format; defaults to 60 minutes |
 | `keepDays`           | `metrics.keep.days`        | an integer            |
 | `withDirectMemory()` | `metrics.opt.direct`       | `true`/`false`        |
 | `withClassLoading()` | `metrics.opt.classloading` | `true`/`false`        |
@@ -285,11 +306,11 @@ order):
 | `withCodeCache()`    | `metrics.opt.codecache`    | `true`/`false`        |
 | `withProcessMemory()`| `metrics.opt.process`      | `true`/`false`        |
 
-This is what lets an ops team tune a deployed app — interval,
-retention, opt-in metrics — via a JVM flag, with no code change and
-no redeploy, even when the app itself only ever calls the one-line
-`Metrics.start("app-name")`. An invalid property value (e.g.
-`metrics.interval=abc`), or an interval that resolves to zero or
+This is what lets an ops team tune a deployed app — sample/write
+interval, retention, opt-in metrics — via a JVM flag, with no code
+change and no redeploy, even when the app itself only ever calls the
+one-line `Metrics.start("app-name")`. An invalid property value (e.g.
+`metrics.write.interval=abc`), or an interval that resolves to zero or
 negative (explicit or via the property), is warned to stderr and the
 default wins — never throws.
 
@@ -308,14 +329,17 @@ PrometheusMetrics.start("app")       (or builder()...start())
         │        ▲                    JVM binders (memory, threads, GC),
         │        │                    every meter tagged application=<app>
         │        │ scrape()
-        ├─▶ PrometheusWriteDaemon ─▶ PrometheusSnapshotter
-        │   (IntervalDaemon)              │
-        │                                 ▼
-        │                    PrometheusSnapshotFormatter
-        │                    (drop # lines, append timestamp)
-        │                                 │
-        │                                 ▼
-        │                    PrometheusFileWriter ─▶ <app>-<date>.prom
+        ├─▶ PrometheusWriteDaemon ─▶ PrometheusSnapshotter.sample()
+        │   (IntervalDaemon,                   │
+        │    in-memory line buffer)            ▼
+        │                          PrometheusSnapshotFormatter
+        │                          (drop # lines, append timestamp)
+        │                                       │
+        │                                       ▼ (buffered, then on write interval)
+        │                          PrometheusSnapshotter.flush()
+        │                                       │
+        │                                       ▼
+        │                          PrometheusFileWriter ─▶ <app>-<date>.prom
         │
         └─▶ CleanupDaemon (from core, suffix ".prom")
 ```
@@ -349,23 +373,32 @@ modules because they always release together at the same version:
 
 ### The snapshot pipeline
 
-Each tick is three small steps, each in its own class so it can be
-tested on its own:
+`PrometheusSnapshotter` splits sampling from writing, mirroring core's
+sample/write split:
 
-1. `PrometheusSnapshotter` reads the clock, then calls `scrape()` on the
-   registry. It depends only on a `PrometheusMeterRegistry`, not on how
-   it was made, so a registry that comes from somewhere else (for
-   example Spring's) can be plugged in later. Any failure is warned
-   about on stderr, never thrown.
-2. `PrometheusSnapshotFormatter` turns the scrape into sample lines. It
-   drops `# HELP` / `# TYPE` / blank lines, so snapshots can be appended
-   into one history file without repeating metadata, and appends the
-   snapshot time in epoch milliseconds at the very end of each line, so
-   label values with spaces or braces never need parsing.
-3. `PrometheusFileWriter` appends the lines to the daily file: created
-   with owner-only permissions, written as UTF-8 (what the Prometheus
-   format specifies) in a single write per snapshot, and `synchronized`
-   so batches from different threads never interleave.
+- `sample()` reads the clock, calls `scrape()` on the registry, and
+  turns the scrape into sample lines via `PrometheusSnapshotFormatter`
+  — dropping `# HELP` / `# TYPE` / blank lines, so snapshots can be
+  appended into one history file without repeating metadata, and
+  appending the snapshot time in epoch milliseconds at the very end of
+  each line, so label values with spaces or braces never need parsing.
+  Any failure is warned about on stderr, never thrown; `sample()`
+  returns an empty list rather than let the exception propagate.
+- `flush(lines)` hands a (possibly multi-snapshot) batch of lines to
+  `PrometheusFileWriter`, which appends them to the daily file: created
+  with owner-only permissions, written as UTF-8 (what the Prometheus
+  format specifies) in a single write per call, and `synchronized` so
+  batches from different threads never interleave.
+- `snapshot()` is the original, simpler `flush(sample())` — sample and
+  write in one call — kept for anyone calling `PrometheusSnapshotter`
+  directly outside the buffering daemon.
+
+`PrometheusWriteDaemon` calls `sample()` on its sample interval,
+appending the lines to an in-memory buffer (capped at a fixed number
+of lines, flushed early if reached), and `flush(...)` whenever the
+write interval has elapsed since the last flush. A single-interval
+constructor overload treats sample and write as the same value, giving
+today's one-scrape-per-write behaviour as the default.
 
 ### Public API
 
@@ -377,13 +410,18 @@ independent of that.
 
 ### Threading and shutdown
 
-Two daemon threads, like core: the write daemon and a cleanup daemon,
-on the same interval. The first snapshot is taken immediately at start,
-then one per interval; there is no final snapshot at `stop()`.
+Two daemon threads, like core: the write daemon, sampling on the
+sample interval and flushing on the write interval, and a cleanup
+daemon on the write interval's cadence. The first sample is taken
+immediately at start, then one per sample interval; `stop()` flushes
+whatever is buffered as a final write, so a clean shutdown never loses
+buffered samples. `snapshot()` samples and flushes immediately, for
+marking a test phase.
 
-`stop()` signals both threads, joins both (bounded to 5s each) and only
-then closes the registry, so a snapshot is never taken from a closed
-registry and no write is left in flight when it returns. Unlike core's
+`stop()` signals both threads, flushes the write daemon's buffer,
+joins both threads (bounded to 5s each) and only then closes the
+registry, so a snapshot is never taken from a closed registry and no
+write is left in flight when it returns. Unlike core's
 single static `Metrics`, each `PrometheusMetrics` is an independent
 instance, so each registers its own JVM shutdown hook at start and
 removes it again in `stop()`. When the hook itself is what calls `stop()`

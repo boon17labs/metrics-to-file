@@ -83,6 +83,37 @@ class PrometheusSnapshotterIT {
     }
 
     @Test
+    void shouldSampleWithoutWritingAnything(@TempDir final File logDir) {
+        // given
+        final PrometheusMeterRegistry registry = registryWithQueueSizeGauge();
+        final PrometheusSnapshotter snapshotter = snapshotter(registry, logDir, new MutableClock(TIMESTAMP));
+
+        // when
+        final List<String> lines = snapshotter.sample();
+
+        // then
+        assertEquals(
+                Collections.singletonList("queue_size{application=\"order-service\"} 7.0 1724580000000"),
+                lines);
+        assertFalse(promFile(logDir).exists());
+    }
+
+    @Test
+    void shouldFlushPreviouslySampledLinesToTheDailyFile(@TempDir final File logDir)
+            throws IOException {
+        // given
+        final PrometheusMeterRegistry registry = registryWithQueueSizeGauge();
+        final PrometheusSnapshotter snapshotter = snapshotter(registry, logDir, new MutableClock(TIMESTAMP));
+        final List<String> sampled = snapshotter.sample();
+
+        // when
+        snapshotter.flush(sampled);
+
+        // then
+        assertEquals(sampled, readLinesOf(promFile(logDir)));
+    }
+
+    @Test
     void shouldWriteNoFileWhenRegistryHasNoMeters(@TempDir final File logDir) {
         // given
         final PrometheusMeterRegistry emptyRegistry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);

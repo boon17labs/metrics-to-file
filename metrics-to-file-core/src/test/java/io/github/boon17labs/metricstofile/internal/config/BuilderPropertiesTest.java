@@ -15,7 +15,8 @@ class BuilderPropertiesTest {
     @AfterEach
     void clearProperties() {
         System.clearProperty("metrics.log.dir");
-        System.clearProperty("metrics.interval");
+        System.clearProperty("metrics.write.interval");
+        System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
         System.clearProperty("metrics.opt.direct");
     }
@@ -37,66 +38,105 @@ class BuilderPropertiesTest {
     }
 
     @Test
-    void shouldReturnExplicitIntervalWhenSet() {
+    void shouldReturnExplicitWriteIntervalWhenSet() {
         final Duration explicit = Duration.ofMillis(20L);
-        assertEquals(explicit, BuilderProperties.interval(explicit));
+        assertEquals(explicit, BuilderProperties.writeInterval(explicit));
     }
 
     @Test
-    void shouldReturnPropertyIntervalWhenExplicitNotSet() {
-        System.setProperty("metrics.interval", "5");
-        assertEquals(Duration.ofMinutes(5L), BuilderProperties.interval(null));
+    void shouldReturnPropertyWriteIntervalWhenExplicitNotSet() {
+        System.setProperty("metrics.write.interval", "5");
+        assertEquals(Duration.ofMinutes(5L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenNeitherSet() {
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    void shouldReturnDefaultWriteIntervalWhenNeitherSet() {
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenPropertyIsNotANumber() {
-        System.setProperty("metrics.interval", "not-a-number");
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    void shouldReturnDefaultWriteIntervalWhenPropertyIsNotANumber() {
+        System.setProperty("metrics.write.interval", "not-a-number");
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldParseMillisecondsSuffix() {
-        System.setProperty("metrics.interval", "500ms");
-        assertEquals(Duration.ofMillis(500L), BuilderProperties.interval(null));
+    void shouldParseMillisecondsSuffixForWriteInterval() {
+        System.setProperty("metrics.write.interval", "500ms");
+        assertEquals(Duration.ofMillis(500L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldParseSecondsSuffix() {
-        System.setProperty("metrics.interval", "1s");
-        assertEquals(Duration.ofSeconds(1L), BuilderProperties.interval(null));
+    void shouldParseSecondsSuffixForWriteInterval() {
+        System.setProperty("metrics.write.interval", "1s");
+        assertEquals(Duration.ofSeconds(1L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldParseMinutesSuffix() {
-        System.setProperty("metrics.interval", "2m");
-        assertEquals(Duration.ofMinutes(2L), BuilderProperties.interval(null));
+    void shouldParseMinutesSuffixForWriteInterval() {
+        System.setProperty("metrics.write.interval", "2m");
+        assertEquals(Duration.ofMinutes(2L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenPropertyIsZero() {
-        System.setProperty("metrics.interval", "0");
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    void shouldReturnDefaultWriteIntervalWhenPropertyIsZero() {
+        System.setProperty("metrics.write.interval", "0");
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenPropertyIsNegative() {
-        System.setProperty("metrics.interval", "-1s");
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    void shouldReturnDefaultWriteIntervalWhenPropertyIsNegative() {
+        System.setProperty("metrics.write.interval", "-1s");
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(null));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenExplicitIsZero() {
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(Duration.ZERO));
+    void shouldReturnDefaultWriteIntervalWhenExplicitIsZero() {
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(Duration.ZERO));
     }
 
     @Test
-    void shouldReturnDefaultIntervalWhenExplicitIsNegative() {
-        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(Duration.ofSeconds(-1L)));
+    void shouldReturnDefaultWriteIntervalWhenExplicitIsNegative() {
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.writeInterval(Duration.ofSeconds(-1L)));
+    }
+
+    @Test
+    void shouldReturnExplicitSampleIntervalWhenSet() {
+        final Duration explicit = Duration.ofMillis(5L);
+        assertEquals(explicit, BuilderProperties.sampleInterval(explicit, Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldReturnPropertySampleIntervalWhenExplicitNotSet() {
+        System.setProperty("metrics.sample.interval", "5s");
+        assertEquals(Duration.ofSeconds(5L),
+                BuilderProperties.sampleInterval(null, Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldFallBackToWriteIntervalWhenSampleIntervalNeitherSet() {
+        assertEquals(Duration.ofMinutes(5L),
+                BuilderProperties.sampleInterval(null, Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldFallBackToWriteIntervalWhenSamplePropertyIsInvalid() {
+        System.setProperty("metrics.sample.interval", "not-a-number");
+        assertEquals(Duration.ofMinutes(5L),
+                BuilderProperties.sampleInterval(null, Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldFallBackToWriteIntervalWhenSamplePropertyIsZero() {
+        System.setProperty("metrics.sample.interval", "0");
+        assertEquals(Duration.ofMinutes(5L),
+                BuilderProperties.sampleInterval(null, Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldFallBackToWriteIntervalWhenExplicitSampleIntervalIsNegative() {
+        assertEquals(Duration.ofMinutes(5L),
+                BuilderProperties.sampleInterval(Duration.ofSeconds(-1L), Duration.ofMinutes(5L)));
     }
 
     @Test

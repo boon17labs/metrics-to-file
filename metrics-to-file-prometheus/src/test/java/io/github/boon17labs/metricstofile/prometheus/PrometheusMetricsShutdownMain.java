@@ -22,7 +22,7 @@ public final class PrometheusMetricsShutdownMain {
         PrometheusMetrics.builder()
                 .appName("order-service")
                 .logDir(logDir)
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
 
         // Wait for the first snapshot so the instance is demonstrably running.

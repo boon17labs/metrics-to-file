@@ -41,7 +41,8 @@ class PrometheusMetricsIT {
             started = null;
         }
         System.clearProperty("metrics.log.dir");
-        System.clearProperty("metrics.interval");
+        System.clearProperty("metrics.write.interval");
+        System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
     }
 
@@ -160,6 +161,35 @@ class PrometheusMetricsIT {
     }
 
     @Test
+    void shouldSampleAndWriteImmediatelyOnSnapshot(@TempDir final File logDir) throws Exception {
+        // given: a sample/write interval long enough that only snapshot() can add a line
+        final long longInterval = 100_000L;
+        final PrometheusMetrics metrics = start(PrometheusMetrics.builder()
+                .appName("order-service")
+                .logDir(logDir.getAbsolutePath())
+                .sampleInterval(Duration.ofMillis(longInterval))
+                .writeInterval(Duration.ofMillis(longInterval)));
+        assertTrue(waitUntil(() -> lineCount(promFile(logDir)) >= 1));
+        final int before = lineCount(promFile(logDir));
+
+        // when
+        metrics.snapshot();
+
+        // then: a second scrape of the full JVM registry, not just one more line
+        assertTrue(lineCount(promFile(logDir)) > before);
+    }
+
+    @Test
+    void shouldNotThrowWhenSnapshotCalledAfterStop(@TempDir final File logDir) {
+        // given
+        final PrometheusMetrics metrics = start(builder(logDir));
+        metrics.stop();
+
+        // when / then
+        assertDoesNotThrow(metrics::snapshot);
+    }
+
+    @Test
     void shouldNotThrowWhenStoppedTwice(@TempDir final File logDir) {
         // given
         final PrometheusMetrics metrics = start(builder(logDir));
@@ -259,7 +289,7 @@ class PrometheusMetricsIT {
         return PrometheusMetrics.builder()
                 .appName("order-service")
                 .logDir(logDir.getAbsolutePath())
-                .interval(SHORT_INTERVAL);
+                .writeInterval(SHORT_INTERVAL);
     }
 
     private PrometheusMetrics start(final PrometheusMetrics.Builder builder) {

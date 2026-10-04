@@ -15,10 +15,13 @@ import java.time.Duration;
  * Entry point for the Prometheus-format side of metrics-to-file.
  * {@code PrometheusMetrics.start("app-name")} creates a Micrometer registry
  * pre-populated with the default JVM metrics (memory, threads, GC), every
- * meter tagged {@code application=<appName>}, and appends a timestamped
- * snapshot of it to a daily file, {@code <logDir>/<appName>-<yyyy-MM-dd>.prom},
- * once at start and then once per interval. Files older than {@code keepDays}
- * are deleted automatically. Both jobs run on daemon threads.
+ * meter tagged {@code application=<appName>}, and samples it on a fixed
+ * sample interval into an in-memory buffer, which is appended as timestamped
+ * lines to a daily file, {@code <logDir>/<appName>-<yyyy-MM-dd>.prom}, on a
+ * (typically longer) write interval — once at start, then on every write
+ * interval, on {@link #stop()}, or on demand via {@link #snapshot()}. Files
+ * older than {@code keepDays} are deleted on the same cadence as the write.
+ * Both jobs run on daemon threads.
  *
  * <p>The registry is exposed by {@link #registry()}, so an application (or
  * another metrics-to-file module) can register its own meters on it and have
@@ -26,10 +29,10 @@ import java.time.Duration;
  *
  * <p>Configure with {@link #builder()}. Anything left unset falls back to the
  * same system properties as {@code Metrics} in {@code metrics-to-file-core}
- * ({@code metrics.log.dir}, {@code metrics.interval} in minutes or with a
- * unit suffix ({@code 500ms}, {@code 30s}, {@code 2m}),
- * {@code metrics.keep.days}), then to the defaults: {@code ./metrics}, 60
- * minutes, 7 days.
+ * ({@code metrics.log.dir}, {@code metrics.sample.interval} and
+ * {@code metrics.write.interval} in minutes or with a unit suffix
+ * ({@code 500ms}, {@code 30s}, {@code 2m}), {@code metrics.keep.days}), then
+ * to the defaults: {@code ./metrics}, 60 minutes, 60 minutes, 7 days.
  *
  * <p>A JVM shutdown hook calls {@link #stop()} automatically, so an app that
  * never calls it explicitly still shuts down cleanly. The hook is removed
@@ -77,9 +80,20 @@ public final class PrometheusMetrics {
     }
 
     /**
-     * Stops both background threads, waiting (bounded) for each to actually
-     * finish so no write is left in flight when this returns, then closes the
-     * registry. Safe to call more than once; never throws.
+     * Takes one sample right now and writes it immediately, without waiting
+     * for the next scheduled write. Useful for marking a test phase.
+     */
+    public synchronized void snapshot() {
+        if (!stopped) {
+            writeDaemon.sampleAndFlushNow();
+        }
+    }
+
+    /**
+     * Stops both background threads — flushing any buffered samples first —
+     * waiting (bounded) for each to actually finish so no write is left in
+     * flight when this returns, then closes the registry. Safe to call more
+     * than once; never throws.
      */
     public synchronized void stop() {
         if (stopped) {
@@ -90,6 +104,7 @@ public final class PrometheusMetrics {
         // Stop the threads before closing the registry, so no snapshot is
         // ever taken from a closed registry.
         writeDaemon.shutdown();
+        writeDaemon.flushNow();
         cleanupDaemon.shutdown();
         joinQuietly(writeDaemon);
         joinQuietly(cleanupDaemon);
@@ -127,16 +142,16 @@ public final class PrometheusMetrics {
     }
 
     private static PrometheusMetrics launch(final String appName, final File logDir,
-            final Duration interval, final int keepDays) {
+            final Duration sampleInterval, final Duration writeInterval, final int keepDays) {
         final JvmMetricsRegistry jvmRegistry = new JvmMetricsRegistry(appName);
         final PrometheusSnapshotter snapshotter = new PrometheusSnapshotter(
                 jvmRegistry.registry(), new PrometheusFileWriter(appName, logDir));
-        final PrometheusWriteDaemon writeDaemon =
-                new PrometheusWriteDaemon(snapshotter, interval.toMillis());
-        // Cleanup runs on the same interval as the writing, like in core, and only
+        final PrometheusWriteDaemon writeDaemon = new PrometheusWriteDaemon(
+                snapshotter, sampleInterval.toMillis(), writeInterval.toMillis());
+        // Cleanup runs on the same cadence as the writing, like in core, and only
         // touches files with the same suffix the writer produces.
         final CleanupDaemon cleanupDaemon = new CleanupDaemon(
-                logDir, appName, keepDays, interval.toMillis(), PrometheusFileWriter.SUFFIX);
+                logDir, appName, keepDays, writeInterval.toMillis(), PrometheusFileWriter.SUFFIX);
         writeDaemon.start();
         cleanupDaemon.start();
         final PrometheusMetrics metrics = new PrometheusMetrics(jvmRegistry, writeDaemon, cleanupDaemon);
@@ -152,7 +167,8 @@ public final class PrometheusMetrics {
 
         private String appName;
         private File logDir;
-        private Duration interval;
+        private Duration sampleInterval;
+        private Duration writeInterval;
         private Integer keepDays;
 
         private Builder() {
@@ -168,8 +184,15 @@ public final class PrometheusMetrics {
             return this;
         }
 
-        public Builder interval(final Duration interval) {
-            this.interval = interval;
+        /** How often metrics are sampled into the in-memory buffer. Defaults to {@link #writeInterval}. */
+        public Builder sampleInterval(final Duration sampleInterval) {
+            this.sampleInterval = sampleInterval;
+            return this;
+        }
+
+        /** How often the in-memory buffer is written to file. */
+        public Builder writeInterval(final Duration writeInterval) {
+            this.writeInterval = writeInterval;
             return this;
         }
 
@@ -185,8 +208,11 @@ public final class PrometheusMetrics {
             if (appName == null) {
                 throw new IllegalStateException("appName must be set before calling start()");
             }
-            return launch(appName, BuilderProperties.logDir(logDir),
-                    BuilderProperties.interval(interval), BuilderProperties.keepDays(keepDays));
+            final Duration resolvedWriteInterval = BuilderProperties.writeInterval(writeInterval);
+            final Duration resolvedSampleInterval =
+                    BuilderProperties.sampleInterval(sampleInterval, resolvedWriteInterval);
+            return launch(appName, BuilderProperties.logDir(logDir), resolvedSampleInterval,
+                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays));
         }
     }
 }

@@ -27,9 +27,10 @@ final PrometheusMetrics metrics = PrometheusMetrics.start("order-service");
 // With configuration
 PrometheusMetrics.builder()
     .appName("order-service")
-    .logDir("/var/log/metrics")          // default: ./metrics
-    .interval(Duration.ofMinutes(15))    // default: 60 min
-    .keepDays(14)                        // default: 7
+    .logDir("/var/log/metrics")              // default: ./metrics
+    .sampleInterval(Duration.ofSeconds(5))   // default: same as writeInterval
+    .writeInterval(Duration.ofMinutes(15))   // default: 60 min
+    .keepDays(14)                            // default: 7
     .start();
 
 // Stop — symmetric with start
@@ -50,9 +51,11 @@ Micrometer's `ExecutorServiceMetrics.monitor(metrics.registry(), pool,
 
 ## What it writes
 
-One file per day, `<logDir>/<appName>-<yyyy-MM-dd>.prom`. A snapshot of
-the whole registry is appended once when you call `start`, and then
-once per interval. Each sample is one line:
+One file per day, `<logDir>/<appName>-<yyyy-MM-dd>.prom`. The registry
+is sampled every `sampleInterval` into an in-memory buffer, which is
+appended to the file every `writeInterval` — once when you call
+`start`, then on every write interval, on `stop()`, or on demand via
+`snapshot()`. Each sample is one line:
 
 ```
 jvm_memory_used_bytes{application="order-service",area="heap",id="G1 Old Gen"} 1573480.0 1789807921221
@@ -103,27 +106,36 @@ is used; otherwise the default. `appName` is required.
 | Builder            | System property                   | Default    |
 |--------------------|-----------------------------------|------------|
 | `logDir(String)`   | `metrics.log.dir`                 | `./metrics` |
-| `interval(Duration)` | `metrics.interval` (minutes, or with a unit suffix: `500ms`, `30s`, `2m`) | 60 minutes |
+| `sampleInterval(Duration)` | `metrics.sample.interval` (minutes, or with a unit suffix: `500ms`, `30s`, `2m`) | same as `writeInterval` |
+| `writeInterval(Duration)` | `metrics.write.interval` (same format) | 60 minutes |
 | `keepDays(int)`    | `metrics.keep.days`               | 7          |
 
 These are the same properties `metrics-to-file-core` uses, so an
 application that runs both is tuned in one place — for example
-`-Dmetrics.interval=15` on the command line changes both, with no code
-change. An invalid property value, or an interval that isn't positive,
-is warned about on stderr and the default wins.
+`-Dmetrics.write.interval=15` on the command line changes both, with
+no code change. An invalid property value, or an interval that isn't
+positive, is warned about on stderr and the default wins.
 
 ## Lifecycle and threading
 
-`start` creates the registry and two daemon threads: one taking the
-snapshots — the first immediately, then one per interval — and one
-deleting old files, on the same interval. Neither keeps the JVM alive.
+`start` creates the registry and two daemon threads: one sampling the
+registry — the first sample immediately, then one per sample interval,
+buffered in memory and flushed to file every write interval — and one
+deleting old files, on the write interval's cadence. Neither keeps the
+JVM alive. The in-memory buffer is capped internally and flushed early
+if it fills up, so a write interval set too long cannot grow memory
+use without bound.
 
-`stop()` stops both threads, waiting (at most 5 seconds each) until
-they have actually finished, so no write is left in flight when it
-returns, and then closes the registry. It is safe to call more than
-once. A JVM shutdown hook calls it automatically, so an application that
-never calls `stop()` explicitly still shuts down cleanly; an explicit
-`stop()` removes the hook again.
+Call `snapshot()` to sample and write immediately, without waiting for
+the next scheduled write — useful for marking a test phase.
+
+`stop()` flushes any buffered samples, then stops both threads,
+waiting (at most 5 seconds each) until they have actually finished, so
+no write is left in flight when it returns, and then closes the
+registry. It is safe to call more than once. A JVM shutdown hook calls
+it automatically, so an application that never calls `stop()`
+explicitly still shuts down cleanly; an explicit `stop()` removes the
+hook again.
 
 ## Error handling
 

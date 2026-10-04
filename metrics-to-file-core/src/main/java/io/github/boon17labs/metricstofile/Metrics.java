@@ -16,17 +16,19 @@ import java.util.Map;
  * and activates a {@link MetricsLogger} implementation based on the
  * {@code metrics.implementation} system property, then starts whichever
  * daemon threads that implementation actually needs — a collection
- * daemon logging metrics on a fixed interval, and (only for a
- * file-backed logger) a cleanup daemon deleting old log files. The
- * default {@link NoOpMetricsLogger} needs neither, so an unconfigured
- * app runs no background threads at all. {@code Metrics.stop()} shuts
- * down whichever daemons are running — waiting (bounded) for each to
- * actually terminate before returning, so no write is left in flight
- * — and releases the logger. Safe to call repeatedly; never throws to
- * the caller. Use {@link #builder()} to configure the log directory,
- * interval, retention, or opt-in metrics. A JVM shutdown hook calls
- * {@link #stop()} automatically, so an app that never calls it
- * explicitly still shuts down cleanly.
+ * daemon that samples metrics on a fixed sample interval into an
+ * in-memory buffer and writes that buffer out on a (typically longer)
+ * write interval, and (only for a file-backed logger) a cleanup daemon
+ * deleting old log files. The default {@link NoOpMetricsLogger} needs
+ * neither, so an unconfigured app runs no background threads at all.
+ * {@code Metrics.stop()} shuts down whichever daemons are running —
+ * flushing any buffered samples, then waiting (bounded) for each
+ * daemon to actually terminate before returning, so no write is left
+ * in flight — and releases the logger. Safe to call repeatedly; never
+ * throws to the caller. Use {@link #builder()} to configure the log
+ * directory, sample/write interval, retention, or opt-in metrics. A
+ * JVM shutdown hook calls {@link #stop()} automatically, so an app
+ * that never calls it explicitly still shuts down cleanly.
  */
 public final class Metrics {
 
@@ -57,15 +59,29 @@ public final class Metrics {
      * Logs a custom metric group through whichever {@link MetricsLogger}
      * {@link #start} (or {@link Builder#start()}) activated. A no-op
      * before {@code start()} is called, since the active logger defaults
-     * to {@link NoOpMetricsLogger}.
+     * to {@link NoOpMetricsLogger}. Writes immediately, with no buffering
+     * of its own — unrelated to the sample/write buffering the collection
+     * daemon does for the default and opt-in metrics.
      */
     public static void log(final String type, final Map<String, Object> values) {
         activeLogger.log(type, values);
     }
 
+    /**
+     * Takes one sample of the default and opt-in metrics right now and
+     * writes it immediately, without waiting for the next scheduled write.
+     * Useful for marking a test phase. A no-op before {@code start()}.
+     */
+    public static synchronized void snapshot() {
+        if (collectionDaemon != null) {
+            collectionDaemon.sampleAndFlushNow();
+        }
+    }
+
     public static synchronized void stop() {
         if (collectionDaemon != null) {
             collectionDaemon.shutdown();
+            collectionDaemon.flushNow();
             joinQuietly(collectionDaemon);
             collectionDaemon = null;
         }
@@ -87,15 +103,17 @@ public final class Metrics {
     }
 
     private static synchronized void apply(final String appName, final File logDir,
-            final Duration interval, final int keepDays, final MetricsOptions options) {
+            final Duration sampleInterval, final Duration writeInterval, final int keepDays,
+            final MetricsOptions options) {
         final ResolvedLogger resolved = MetricsLoggerResolver.resolve(appName, logDir);
         activeLogger = resolved.logger();
         if (resolved.requirements().collection()) {
-            collectionDaemon = new MetricsCollectionDaemon(activeLogger, interval.toMillis(), options);
+            collectionDaemon = new MetricsCollectionDaemon(activeLogger,
+                    sampleInterval.toMillis(), writeInterval.toMillis(), options);
             collectionDaemon.start();
         }
         if (resolved.requirements().cleanup()) {
-            cleanupDaemon = new CleanupDaemon(logDir, appName, keepDays, interval.toMillis());
+            cleanupDaemon = new CleanupDaemon(logDir, appName, keepDays, writeInterval.toMillis());
             cleanupDaemon.start();
         }
     }
@@ -107,7 +125,8 @@ public final class Metrics {
 
         private String appName;
         private File logDir;
-        private Duration interval;
+        private Duration sampleInterval;
+        private Duration writeInterval;
         private Integer keepDays;
         private Boolean directMemory;
         private Boolean classLoading;
@@ -128,8 +147,15 @@ public final class Metrics {
             return this;
         }
 
-        public Builder interval(final Duration interval) {
-            this.interval = interval;
+        /** How often metrics are read into the in-memory buffer. Defaults to {@link #writeInterval}. */
+        public Builder sampleInterval(final Duration sampleInterval) {
+            this.sampleInterval = sampleInterval;
+            return this;
+        }
+
+        /** How often the in-memory buffer is written to file. */
+        public Builder writeInterval(final Duration writeInterval) {
+            this.writeInterval = writeInterval;
             return this;
         }
 
@@ -173,8 +199,11 @@ public final class Metrics {
                     BuilderProperties.flag(cpu, "metrics.opt.cpu"),
                     BuilderProperties.flag(codeCache, "metrics.opt.codecache"),
                     BuilderProperties.flag(processMemory, "metrics.opt.process"));
-            apply(appName, BuilderProperties.logDir(logDir), BuilderProperties.interval(interval),
-                    BuilderProperties.keepDays(keepDays), options);
+            final Duration resolvedWriteInterval = BuilderProperties.writeInterval(writeInterval);
+            final Duration resolvedSampleInterval =
+                    BuilderProperties.sampleInterval(sampleInterval, resolvedWriteInterval);
+            apply(appName, BuilderProperties.logDir(logDir), resolvedSampleInterval,
+                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays), options);
         }
     }
 }

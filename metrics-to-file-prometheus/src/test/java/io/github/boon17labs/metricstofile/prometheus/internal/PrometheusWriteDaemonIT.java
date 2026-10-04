@@ -146,11 +146,83 @@ class PrometheusWriteDaemonIT {
         assertFalse(promFile(logDir).exists());
     }
 
+    @Test
+    void shouldBufferSamplesUntilTheWriteIntervalElapses(@TempDir final File logDir) throws Exception {
+        // given: sampled every 20ms, but only written every 500ms
+        final PrometheusWriteDaemon daemon = daemon(registryWithQueueSizeGauge(), logDir, 20L, 500L);
+
+        // when
+        daemon.start();
+        try {
+            Thread.sleep(100L);
+
+            // then: the first sample is always written immediately, but later ones stay
+            // buffered until the write interval elapses
+            assertEquals(1, lineCount(promFile(logDir)));
+
+            assertTrue(waitUntil(() -> lineCount(promFile(logDir)) >= 2));
+        } finally {
+            stop(daemon);
+        }
+    }
+
+    @Test
+    void shouldFlushBufferedLinesOnFlushNowWithoutSamplingAgain(@TempDir final File logDir)
+            throws Exception {
+        // given: a write interval long enough that only an explicit flush can release the buffer
+        final PrometheusWriteDaemon daemon =
+                daemon(registryWithQueueSizeGauge(), logDir, 20L, 100_000L);
+
+        // when
+        daemon.start();
+        try {
+            assertTrue(waitUntil(() -> lineCount(promFile(logDir)) >= 1));
+            Thread.sleep(100L);
+            final int bufferedButUnwritten = lineCount(promFile(logDir));
+
+            daemon.flushNow();
+
+            // then
+            assertTrue(lineCount(promFile(logDir)) > bufferedButUnwritten);
+        } finally {
+            stop(daemon);
+        }
+    }
+
+    @Test
+    void shouldSampleAndFlushImmediatelyOnSampleAndFlushNow(@TempDir final File logDir)
+            throws Exception {
+        // given: a sample/write interval long enough that only an explicit call can add a line
+        final PrometheusWriteDaemon daemon =
+                daemon(registryWithQueueSizeGauge(), logDir, 100_000L, 100_000L);
+
+        // when
+        daemon.start();
+        try {
+            assertTrue(waitUntil(() -> lineCount(promFile(logDir)) >= 1));
+            final int before = lineCount(promFile(logDir));
+
+            daemon.sampleAndFlushNow();
+
+            // then
+            assertEquals(before + 1, lineCount(promFile(logDir)));
+        } finally {
+            stop(daemon);
+        }
+    }
+
     private static PrometheusWriteDaemon daemon(final PrometheusMeterRegistry registry,
             final File logDir, final long intervalMillis) {
         final PrometheusSnapshotter snapshotter = new PrometheusSnapshotter(
                 registry, new PrometheusFileWriter("order-service", logDir));
         return new PrometheusWriteDaemon(snapshotter, intervalMillis);
+    }
+
+    private static PrometheusWriteDaemon daemon(final PrometheusMeterRegistry registry,
+            final File logDir, final long sampleIntervalMillis, final long writeIntervalMillis) {
+        final PrometheusSnapshotter snapshotter = new PrometheusSnapshotter(
+                registry, new PrometheusFileWriter("order-service", logDir));
+        return new PrometheusWriteDaemon(snapshotter, sampleIntervalMillis, writeIntervalMillis);
     }
 
     private static PrometheusMeterRegistry registryWithQueueSizeGauge() {

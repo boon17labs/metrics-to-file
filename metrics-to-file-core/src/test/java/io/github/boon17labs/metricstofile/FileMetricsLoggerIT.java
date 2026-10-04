@@ -1,5 +1,6 @@
 package io.github.boon17labs.metricstofile;
 
+import io.github.boon17labs.metricstofile.internal.buffer.TimestampedSample;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -9,7 +10,10 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermission;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,6 +22,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileMetricsLoggerIT {
@@ -139,6 +144,40 @@ class FileMetricsLoggerIT {
         for (final String line : lines) {
             assertTrue(line.matches(TIMESTAMP_PATTERN + " app=order-service type=heap"));
         }
+    }
+
+    @Test
+    void shouldWriteEachBufferedSampleWithItsOwnTimestampInOneBatch(@TempDir final File logDir)
+            throws IOException {
+        // given
+        final FileMetricsLogger logger = new FileMetricsLogger("order-service", logDir);
+        final Map<String, Object> heapValues = new LinkedHashMap<>();
+        heapValues.put("used_mb", 100);
+        final Map<String, Object> threadValues = new LinkedHashMap<>();
+        threadValues.put("live", 10);
+
+        // when
+        logger.logBatch(Arrays.asList(
+                new TimestampedSample(Instant.parse("2026-01-01T00:00:00Z"), "heap", heapValues),
+                new TimestampedSample(Instant.parse("2026-01-01T00:00:05Z"), "threads", threadValues)));
+
+        // then
+        final List<String> lines = readLinesOf(logFile(logDir, "order-service"));
+        assertEquals(2, lines.size());
+        assertEquals("2026-01-01T00:00:00Z app=order-service type=heap used_mb=100", lines.get(0));
+        assertEquals("2026-01-01T00:00:05Z app=order-service type=threads live=10", lines.get(1));
+    }
+
+    @Test
+    void shouldNotCreateFileWhenBatchIsEmpty(@TempDir final File logDir) {
+        // given
+        final FileMetricsLogger logger = new FileMetricsLogger("order-service", logDir);
+
+        // when
+        logger.logBatch(Collections.emptyList());
+
+        // then
+        assertFalse(logFile(logDir, "order-service").exists());
     }
 
     @Test

@@ -165,6 +165,75 @@ class MetricsCollectionDaemonIT {
     }
 
     @Test
+    void shouldBufferSamplesUntilTheWriteIntervalElapses() throws InterruptedException {
+        // given: sampled every 20ms, but only written every 500ms
+        final InMemoryMetricsLogger logger = new InMemoryMetricsLogger();
+        final MetricsCollectionDaemon daemon =
+                new MetricsCollectionDaemon(logger, 20L, 500L, MetricsOptions.defaults());
+
+        // when
+        daemon.start();
+        try {
+            Thread.sleep(100L);
+
+            // then: the first sample is always written immediately, but later ones stay
+            // buffered until the write interval elapses
+            assertEquals(1, countOfType(logger, "heap"));
+
+            waitUntil(() -> countOfType(logger, "heap") >= 2);
+        } finally {
+            daemon.shutdown();
+        }
+    }
+
+    @Test
+    void shouldFlushBufferedSamplesOnFlushNowWithoutSamplingAgain() throws InterruptedException {
+        // given: a write interval long enough that only an explicit flush can release the buffer
+        final InMemoryMetricsLogger logger = new InMemoryMetricsLogger();
+        final long longWriteInterval = 100_000L;
+        final MetricsCollectionDaemon daemon =
+                new MetricsCollectionDaemon(logger, 20L, longWriteInterval, MetricsOptions.defaults());
+
+        // when
+        daemon.start();
+        try {
+            waitUntil(() -> countOfType(logger, "heap") >= 1);
+            Thread.sleep(100L);
+            final long bufferedButUnwritten = countOfType(logger, "heap");
+
+            daemon.flushNow();
+
+            // then
+            assertTrue(countOfType(logger, "heap") > bufferedButUnwritten);
+        } finally {
+            daemon.shutdown();
+        }
+    }
+
+    @Test
+    void shouldSampleAndFlushImmediatelyOnSampleAndFlushNow() throws InterruptedException {
+        // given: a sample/write interval long enough that only an explicit call can add a sample
+        final InMemoryMetricsLogger logger = new InMemoryMetricsLogger();
+        final long longInterval = 100_000L;
+        final MetricsCollectionDaemon daemon =
+                new MetricsCollectionDaemon(logger, longInterval, longInterval, MetricsOptions.defaults());
+
+        // when
+        daemon.start();
+        try {
+            waitUntil(() -> countOfType(logger, "heap") >= 1);
+            final long before = countOfType(logger, "heap");
+
+            daemon.sampleAndFlushNow();
+
+            // then
+            assertEquals(before + 1, countOfType(logger, "heap"));
+        } finally {
+            daemon.shutdown();
+        }
+    }
+
+    @Test
     void shouldRunAsDaemonThread() {
         // given
         final InMemoryMetricsLogger logger = new InMemoryMetricsLogger();

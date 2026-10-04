@@ -119,7 +119,7 @@ class PrometheusMetricsShutdownHookIT {
         started = PrometheusMetrics.builder()
                 .appName("order-service")
                 .logDir(logDir.getAbsolutePath())
-                .interval(Duration.ofMillis(20L))
+                .writeInterval(Duration.ofMillis(20L))
                 .start();
         return started;
     }

@@ -32,9 +32,10 @@ Metrics.start("order-service");
 // With configuration
 Metrics.builder()
     .appName("order-service")
-    .logDir("/var/log/metrics")          // default: ./metrics
-    .interval(Duration.ofMinutes(15))    // default: 60 min
-    .keepDays(14)                        // default: 7
+    .logDir("/var/log/metrics")              // default: ./metrics
+    .sampleInterval(Duration.ofSeconds(5))   // default: same as writeInterval
+    .writeInterval(Duration.ofMinutes(15))   // default: 60 min
+    .keepDays(14)                            // default: 7
     .withDirectMemory()                  // opt-in
     .withClassLoading()                  // opt-in
     .withCpu()                           // opt-in
@@ -68,7 +69,8 @@ one-line `Metrics.start("app-name")`, with no code change:
 
 ```bash
 -Dmetrics.log.dir=/var/log/metrics
--Dmetrics.interval=15          # minutes; or with a unit: 500ms, 30s, 2m
+-Dmetrics.sample.interval=5s    # default: same as metrics.write.interval
+-Dmetrics.write.interval=15     # minutes; or with a unit: 500ms, 30s, 2m
 -Dmetrics.keep.days=14
 -Dmetrics.opt.direct=true
 -Dmetrics.opt.classloading=true
@@ -76,6 +78,15 @@ one-line `Metrics.start("app-name")`, with no code change:
 -Dmetrics.opt.codecache=true
 -Dmetrics.opt.process=true
 ```
+
+Metrics are read into an in-memory buffer every `sampleInterval`, and
+that buffer is written to file every `writeInterval` — so an app can
+sample every few seconds while only touching disk every few minutes.
+The buffer is capped internally, flushed early if it fills up, and
+always flushed on `stop()` so a clean shutdown never loses buffered
+samples. Call `Metrics.snapshot()` to sample and write immediately,
+without waiting for the next scheduled write — useful for marking a
+test phase.
 
 ### Custom metrics
 
@@ -105,9 +116,9 @@ metrics.stop();
 
 One line, and a timestamped snapshot is appended to
 `order-service-<date>.prom` every 60 minutes by default, with the same
-`metrics.log.dir` / `metrics.interval` / `metrics.keep.days` tuning as
-core. See the module's [README](metrics-to-file-prometheus/README.md)
-for the details.
+`metrics.log.dir` / `metrics.sample.interval` / `metrics.write.interval`
+/ `metrics.keep.days` tuning as core. See the module's
+[README](metrics-to-file-prometheus/README.md) for the details.
 
 ## Modules
 
