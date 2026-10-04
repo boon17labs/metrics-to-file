@@ -26,7 +26,8 @@ import java.time.Duration;
  *
  * <p>Configure with {@link #builder()}. Anything left unset falls back to the
  * same system properties as {@code Metrics} in {@code metrics-to-file-core}
- * ({@code metrics.log.dir}, {@code metrics.interval} in minutes,
+ * ({@code metrics.log.dir}, {@code metrics.interval} in minutes or with a
+ * unit suffix ({@code 500ms}, {@code 30s}, {@code 2m}),
  * {@code metrics.keep.days}), then to the defaults: {@code ./metrics}, 60
  * minutes, 7 days.
  *

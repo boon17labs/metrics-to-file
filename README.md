@@ -68,7 +68,7 @@ one-line `Metrics.start("app-name")`, with no code change:
 
 ```bash
 -Dmetrics.log.dir=/var/log/metrics
--Dmetrics.interval=15          # minutes
+-Dmetrics.interval=15          # minutes; or with a unit: 500ms, 30s, 2m
 -Dmetrics.keep.days=14
 -Dmetrics.opt.direct=true
 -Dmetrics.opt.classloading=true

@@ -277,7 +277,7 @@ order):
 | Field                | System property           | Format                |
 |----------------------|----------------------------|-----------------------|
 | `logDir`             | `metrics.log.dir`          | a path                |
-| `interval`           | `metrics.interval`         | whole minutes, e.g. `15` |
+| `interval`           | `metrics.interval`         | whole minutes (e.g. `15`), or with a unit suffix: `500ms`, `30s`, `2m` |
 | `keepDays`           | `metrics.keep.days`        | an integer            |
 | `withDirectMemory()` | `metrics.opt.direct`       | `true`/`false`        |
 | `withClassLoading()` | `metrics.opt.classloading` | `true`/`false`        |
@@ -289,8 +289,9 @@ This is what lets an ops team tune a deployed app — interval,
 retention, opt-in metrics — via a JVM flag, with no code change and
 no redeploy, even when the app itself only ever calls the one-line
 `Metrics.start("app-name")`. An invalid property value (e.g.
-`metrics.interval=abc`) is warned to stderr and the default wins —
-never throws.
+`metrics.interval=abc`), or an interval that resolves to zero or
+negative (explicit or via the property), is warned to stderr and the
+default wins — never throws.
 
 ## The Prometheus module
 

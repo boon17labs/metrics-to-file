@@ -60,6 +60,46 @@ class BuilderPropertiesTest {
     }
 
     @Test
+    void shouldParseMillisecondsSuffix() {
+        System.setProperty("metrics.interval", "500ms");
+        assertEquals(Duration.ofMillis(500L), BuilderProperties.interval(null));
+    }
+
+    @Test
+    void shouldParseSecondsSuffix() {
+        System.setProperty("metrics.interval", "1s");
+        assertEquals(Duration.ofSeconds(1L), BuilderProperties.interval(null));
+    }
+
+    @Test
+    void shouldParseMinutesSuffix() {
+        System.setProperty("metrics.interval", "2m");
+        assertEquals(Duration.ofMinutes(2L), BuilderProperties.interval(null));
+    }
+
+    @Test
+    void shouldReturnDefaultIntervalWhenPropertyIsZero() {
+        System.setProperty("metrics.interval", "0");
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    }
+
+    @Test
+    void shouldReturnDefaultIntervalWhenPropertyIsNegative() {
+        System.setProperty("metrics.interval", "-1s");
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(null));
+    }
+
+    @Test
+    void shouldReturnDefaultIntervalWhenExplicitIsZero() {
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(Duration.ZERO));
+    }
+
+    @Test
+    void shouldReturnDefaultIntervalWhenExplicitIsNegative() {
+        assertEquals(Duration.ofMinutes(60L), BuilderProperties.interval(Duration.ofSeconds(-1L)));
+    }
+
+    @Test
     void shouldReturnExplicitKeepDaysWhenSet() {
         assertEquals(14, BuilderProperties.keepDays(14));
     }

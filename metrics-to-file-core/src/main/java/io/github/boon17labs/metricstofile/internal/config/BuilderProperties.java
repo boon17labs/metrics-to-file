@@ -18,6 +18,7 @@ public final class BuilderProperties {
 
     private static final String DEFAULT_LOG_DIR = "./metrics";
     private static final long DEFAULT_INTERVAL_MINUTES = 60L;
+    private static final Duration DEFAULT_INTERVAL = Duration.ofMinutes(DEFAULT_INTERVAL_MINUTES);
     private static final int DEFAULT_KEEP_DAYS = 7;
 
     private BuilderProperties() {
@@ -33,19 +34,53 @@ public final class BuilderProperties {
 
     public static Duration interval(final Duration explicit) {
         if (explicit != null) {
+            if (!isPositive(explicit)) {
+                System.err.println("[metrics-to-file] invalid interval '" + explicit
+                        + "', must be positive, using default");
+                return DEFAULT_INTERVAL;
+            }
             return explicit;
         }
         final String value = System.getProperty(INTERVAL_PROPERTY);
         if (value == null) {
-            return Duration.ofMinutes(DEFAULT_INTERVAL_MINUTES);
+            return DEFAULT_INTERVAL;
         }
         try {
-            return Duration.ofMinutes(Long.parseLong(value.trim()));
+            final Duration parsed = parseInterval(value.trim());
+            if (!isPositive(parsed)) {
+                System.err.println("[metrics-to-file] invalid " + INTERVAL_PROPERTY + " '"
+                        + value + "', must be positive, using default");
+                return DEFAULT_INTERVAL;
+            }
+            return parsed;
         } catch (final NumberFormatException e) {
             System.err.println("[metrics-to-file] invalid " + INTERVAL_PROPERTY + " '"
                     + value + "', using default");
-            return Duration.ofMinutes(DEFAULT_INTERVAL_MINUTES);
+            return DEFAULT_INTERVAL;
         }
+    }
+
+    /**
+     * Parses a plain number as whole minutes (backward compatible), or a
+     * number suffixed with {@code ms}, {@code s} or {@code m} as
+     * milliseconds, seconds or minutes respectively, e.g. {@code "500ms"},
+     * {@code "1s"}, {@code "2m"}.
+     */
+    private static Duration parseInterval(final String value) {
+        if (value.endsWith("ms")) {
+            return Duration.ofMillis(Long.parseLong(value.substring(0, value.length() - 2)));
+        }
+        if (value.endsWith("s")) {
+            return Duration.ofSeconds(Long.parseLong(value.substring(0, value.length() - 1)));
+        }
+        if (value.endsWith("m")) {
+            return Duration.ofMinutes(Long.parseLong(value.substring(0, value.length() - 1)));
+        }
+        return Duration.ofMinutes(Long.parseLong(value));
+    }
+
+    private static boolean isPositive(final Duration duration) {
+        return !duration.isZero() && !duration.isNegative();
     }
 
     public static int keepDays(final Integer explicit) {

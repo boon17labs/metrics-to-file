@@ -103,14 +103,14 @@ is used; otherwise the default. `appName` is required.
 | Builder            | System property                   | Default    |
 |--------------------|-----------------------------------|------------|
 | `logDir(String)`   | `metrics.log.dir`                 | `./metrics` |
-| `interval(Duration)` | `metrics.interval` (whole minutes) | 60 minutes |
+| `interval(Duration)` | `metrics.interval` (minutes, or with a unit suffix: `500ms`, `30s`, `2m`) | 60 minutes |
 | `keepDays(int)`    | `metrics.keep.days`               | 7          |
 
 These are the same properties `metrics-to-file-core` uses, so an
 application that runs both is tuned in one place — for example
 `-Dmetrics.interval=15` on the command line changes both, with no code
-change. An invalid property value is warned about on stderr and the
-default wins.
+change. An invalid property value, or an interval that isn't positive,
+is warned about on stderr and the default wins.
 
 ## Lifecycle and threading
 
