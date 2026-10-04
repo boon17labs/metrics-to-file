@@ -120,10 +120,16 @@ files. See ARCHITECTURE.md for how they relate.
   the buffer fills, on `stop()`, or on demand via `Metrics.snapshot()`.
   `sampleInterval` defaults to the resolved `writeInterval`, so an app
   that never sets it keeps the original one-sample-per-write
-  behaviour. Any builder field left unset falls back to its matching
+  behaviour. `CleanupDaemon` deletes files older than `keepDays` on
+  every tick via `internal.file.LogFileCleaner`, then — if `maxSizeMb`
+  is set above its default of `0` (disabled) — deletes the oldest
+  surviving files one at a time until this app's own matching files
+  are back under that total size; a second, independent retention
+  control for a machine that might go unattended longer than its disk
+  can hold. Any builder field left unset falls back to its matching
   `metrics.*` system property (`metrics.log.dir`, `metrics.sample.interval`
   and `metrics.write.interval` in minutes or with a unit suffix
-  (`500ms`/`30s`/`2m`), `metrics.keep.days`,
+  (`500ms`/`30s`/`2m`), `metrics.keep.days`, `metrics.max.size.mb`,
   `metrics.opt.direct`/`classloading`/`cpu`/`codecache`/`process`), then to the
   documented default — see `internal.config.BuilderProperties`.
   `Metrics.stop()` flushes any buffered samples, then shuts down
@@ -150,7 +156,9 @@ files. See ARCHITECTURE.md for how they relate.
   interval's cadence) run as daemon threads; `stop()` flushes the
   buffer, joins both, then closes the registry, and a JVM shutdown
   hook calls it. Same `metrics.log.dir`/`metrics.sample.interval`/
-  `metrics.write.interval`/`metrics.keep.days` fallbacks as core.
+  `metrics.write.interval`/`metrics.keep.days`/`metrics.max.size.mb`
+  fallbacks as core, including the same `maxSizeMb` size-cap retention
+  control on the shared `CleanupDaemon`.
   Deliberately independent of `MetricsLogger` and the provider SPI —
   see ARCHITECTURE.md. Not started: HTTP `/metrics` server mode,
   opt-in binders.

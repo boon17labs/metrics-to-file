@@ -26,7 +26,8 @@ import java.util.Map;
  * daemon to actually terminate before returning, so no write is left
  * in flight — and releases the logger. Safe to call repeatedly; never
  * throws to the caller. Use {@link #builder()} to configure the log
- * directory, sample/write interval, retention, or opt-in metrics. A
+ * directory, sample/write interval, retention (by age and/or total
+ * size), or opt-in metrics. A
  * JVM shutdown hook calls {@link #stop()} automatically, so an app
  * that never calls it explicitly still shuts down cleanly.
  */
@@ -104,7 +105,7 @@ public final class Metrics {
 
     private static synchronized void apply(final String appName, final File logDir,
             final Duration sampleInterval, final Duration writeInterval, final int keepDays,
-            final MetricsOptions options) {
+            final long maxSizeMb, final MetricsOptions options) {
         final ResolvedLogger resolved = MetricsLoggerResolver.resolve(appName, logDir);
         activeLogger = resolved.logger();
         if (resolved.requirements().collection()) {
@@ -113,7 +114,8 @@ public final class Metrics {
             collectionDaemon.start();
         }
         if (resolved.requirements().cleanup()) {
-            cleanupDaemon = new CleanupDaemon(logDir, appName, keepDays, writeInterval.toMillis());
+            cleanupDaemon = new CleanupDaemon(
+                    logDir, appName, keepDays, maxSizeMb, writeInterval.toMillis());
             cleanupDaemon.start();
         }
     }
@@ -128,6 +130,7 @@ public final class Metrics {
         private Duration sampleInterval;
         private Duration writeInterval;
         private Integer keepDays;
+        private Long maxSizeMb;
         private Boolean directMemory;
         private Boolean classLoading;
         private Boolean cpu;
@@ -161,6 +164,16 @@ public final class Metrics {
 
         public Builder keepDays(final int keepDays) {
             this.keepDays = keepDays;
+            return this;
+        }
+
+        /**
+         * Maximum total size, in MB, of this app's own log files before the
+         * oldest are deleted to make room, independently of {@link #keepDays}.
+         * {@code 0} (the default) disables this check.
+         */
+        public Builder maxSizeMb(final long maxSizeMb) {
+            this.maxSizeMb = maxSizeMb;
             return this;
         }
 
@@ -203,7 +216,8 @@ public final class Metrics {
             final Duration resolvedSampleInterval =
                     BuilderProperties.sampleInterval(sampleInterval, resolvedWriteInterval);
             apply(appName, BuilderProperties.logDir(logDir), resolvedSampleInterval,
-                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays), options);
+                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays),
+                    BuilderProperties.maxSizeMb(maxSizeMb), options);
         }
     }
 }

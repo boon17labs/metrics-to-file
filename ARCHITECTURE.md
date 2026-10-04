@@ -275,6 +275,7 @@ configuration:
 | sample interval          | same as write interval              |
 | write interval           | 60 minutes                          |
 | retention (`keepDays`)   | 7 days                              |
+| max total size (`maxSizeMb`) | 0 (disabled)                    |
 | opt-in metrics           | all off (direct memory, classloading, CPU, code cache, process memory) |
 
 So calling `Metrics.start("app")` with `metrics.implementation` unset
@@ -300,6 +301,7 @@ order):
 | `sampleInterval`     | `metrics.sample.interval`  | whole minutes (e.g. `15`), or with a unit suffix: `500ms`, `30s`, `2m`; defaults to the resolved `writeInterval` |
 | `writeInterval`      | `metrics.write.interval`   | same format; defaults to 60 minutes |
 | `keepDays`           | `metrics.keep.days`        | an integer            |
+| `maxSizeMb`          | `metrics.max.size.mb`      | an integer, in MB; `0` disables the check (default) |
 | `withDirectMemory()` | `metrics.opt.direct`       | `true`/`false`        |
 | `withClassLoading()` | `metrics.opt.classloading` | `true`/`false`        |
 | `withCpu()`          | `metrics.opt.cpu`          | `true`/`false`        |
@@ -310,9 +312,22 @@ This is what lets an ops team tune a deployed app — sample/write
 interval, retention, opt-in metrics — via a JVM flag, with no code
 change and no redeploy, even when the app itself only ever calls the
 one-line `Metrics.start("app-name")`. An invalid property value (e.g.
-`metrics.write.interval=abc`), or an interval that resolves to zero or
-negative (explicit or via the property), is warned to stderr and the
-default wins — never throws.
+`metrics.write.interval=abc`), an interval that resolves to zero or
+negative (explicit or via the property), or a negative `maxSizeMb`, is
+warned to stderr and the default wins — never throws.
+
+`maxSizeMb` is a second, independent retention control alongside
+`keepDays`: age-based deletion runs first, then — only if `maxSizeMb`
+is set above its default of `0` — the oldest surviving files are
+deleted one at a time until the app's own matching files (`.log` for
+core, `.prom` for the prometheus module) are back under that total
+size. It's an opt-in safety net for a machine that might go
+unattended for longer than its disk can hold; the recommended setup is
+a generous `keepDays` (well above the longest period the deployment
+might go without being accessed) with `maxSizeMb` as the actual
+backstop. There's no sensible positive default size to fall back to,
+so an invalid or negative value disables the check entirely rather
+than guessing one.
 
 ## The Prometheus module
 

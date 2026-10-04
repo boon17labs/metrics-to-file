@@ -20,8 +20,9 @@ import java.time.Duration;
  * lines to a daily file, {@code <logDir>/<appName>-<yyyy-MM-dd>.prom}, on a
  * (typically longer) write interval — once at start, then on every write
  * interval, on {@link #stop()}, or on demand via {@link #snapshot()}. Files
- * older than {@code keepDays} are deleted on the same cadence as the write.
- * Both jobs run on daemon threads.
+ * older than {@code keepDays} — and, if a maximum total size is set, the
+ * oldest surviving files beyond that size — are deleted on the same cadence
+ * as the write. Both jobs run on daemon threads.
  *
  * <p>The registry is exposed by {@link #registry()}, so an application (or
  * another metrics-to-file module) can register its own meters on it and have
@@ -142,7 +143,8 @@ public final class PrometheusMetrics {
     }
 
     private static PrometheusMetrics launch(final String appName, final File logDir,
-            final Duration sampleInterval, final Duration writeInterval, final int keepDays) {
+            final Duration sampleInterval, final Duration writeInterval, final int keepDays,
+            final long maxSizeMb) {
         final JvmMetricsRegistry jvmRegistry = new JvmMetricsRegistry(appName);
         final PrometheusSnapshotter snapshotter = new PrometheusSnapshotter(
                 jvmRegistry.registry(), new PrometheusFileWriter(appName, logDir));
@@ -150,8 +152,8 @@ public final class PrometheusMetrics {
                 snapshotter, sampleInterval.toMillis(), writeInterval.toMillis());
         // Cleanup runs on the same cadence as the writing, like in core, and only
         // touches files with the same suffix the writer produces.
-        final CleanupDaemon cleanupDaemon = new CleanupDaemon(
-                logDir, appName, keepDays, writeInterval.toMillis(), PrometheusFileWriter.SUFFIX);
+        final CleanupDaemon cleanupDaemon = new CleanupDaemon(logDir, appName, keepDays,
+                maxSizeMb, writeInterval.toMillis(), PrometheusFileWriter.SUFFIX);
         writeDaemon.start();
         cleanupDaemon.start();
         final PrometheusMetrics metrics = new PrometheusMetrics(jvmRegistry, writeDaemon, cleanupDaemon);
@@ -170,6 +172,7 @@ public final class PrometheusMetrics {
         private Duration sampleInterval;
         private Duration writeInterval;
         private Integer keepDays;
+        private Long maxSizeMb;
 
         private Builder() {
         }
@@ -202,6 +205,16 @@ public final class PrometheusMetrics {
         }
 
         /**
+         * Maximum total size, in MB, of this app's own {@code .prom} files
+         * before the oldest are deleted to make room, independently of
+         * {@link #keepDays}. {@code 0} (the default) disables this check.
+         */
+        public Builder maxSizeMb(final long maxSizeMb) {
+            this.maxSizeMb = maxSizeMb;
+            return this;
+        }
+
+        /**
          * @throws IllegalStateException if no app name was set
          */
         public PrometheusMetrics start() {
@@ -212,7 +225,8 @@ public final class PrometheusMetrics {
             final Duration resolvedSampleInterval =
                     BuilderProperties.sampleInterval(sampleInterval, resolvedWriteInterval);
             return launch(appName, BuilderProperties.logDir(logDir), resolvedSampleInterval,
-                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays));
+                    resolvedWriteInterval, BuilderProperties.keepDays(keepDays),
+                    BuilderProperties.maxSizeMb(maxSizeMb));
         }
     }
 }

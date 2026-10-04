@@ -16,11 +16,13 @@ public final class BuilderProperties {
     private static final String WRITE_INTERVAL_PROPERTY = "metrics.write.interval";
     private static final String SAMPLE_INTERVAL_PROPERTY = "metrics.sample.interval";
     private static final String KEEP_DAYS_PROPERTY = "metrics.keep.days";
+    private static final String MAX_SIZE_MB_PROPERTY = "metrics.max.size.mb";
 
     private static final String DEFAULT_LOG_DIR = "./metrics";
     private static final long DEFAULT_INTERVAL_MINUTES = 60L;
     private static final Duration DEFAULT_INTERVAL = Duration.ofMinutes(DEFAULT_INTERVAL_MINUTES);
     private static final int DEFAULT_KEEP_DAYS = 7;
+    private static final long DEFAULT_MAX_SIZE_MB = 0L;
 
     private BuilderProperties() {
     }
@@ -103,6 +105,43 @@ public final class BuilderProperties {
 
     private static boolean isPositive(final Duration duration) {
         return !duration.isZero() && !duration.isNegative();
+    }
+
+    /**
+     * Maximum total size, in MB, of this app's own log files before the
+     * oldest are deleted to make room, independently of {@link #keepDays}.
+     * {@code 0} (the default) disables this check entirely — an opt-in
+     * safety net for a machine that might go unattended for longer than
+     * its disk can hold at the configured sample rate. There is no
+     * sensible positive default to fall back to, so an invalid or
+     * negative value disables the check rather than guessing a size.
+     */
+    public static long maxSizeMb(final Long explicit) {
+        if (explicit != null) {
+            if (explicit < 0) {
+                System.err.println("[metrics-to-file] invalid " + MAX_SIZE_MB_PROPERTY + " '"
+                        + explicit + "', must not be negative, using default");
+                return DEFAULT_MAX_SIZE_MB;
+            }
+            return explicit;
+        }
+        final String value = System.getProperty(MAX_SIZE_MB_PROPERTY);
+        if (value == null) {
+            return DEFAULT_MAX_SIZE_MB;
+        }
+        try {
+            final long parsed = Long.parseLong(value.trim());
+            if (parsed < 0) {
+                System.err.println("[metrics-to-file] invalid " + MAX_SIZE_MB_PROPERTY + " '"
+                        + value + "', must not be negative, using default");
+                return DEFAULT_MAX_SIZE_MB;
+            }
+            return parsed;
+        } catch (final NumberFormatException e) {
+            System.err.println("[metrics-to-file] invalid " + MAX_SIZE_MB_PROPERTY + " '"
+                    + value + "', using default");
+            return DEFAULT_MAX_SIZE_MB;
+        }
     }
 
     public static int keepDays(final Integer explicit) {

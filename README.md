@@ -36,11 +36,12 @@ Metrics.builder()
     .sampleInterval(Duration.ofSeconds(5))   // default: same as writeInterval
     .writeInterval(Duration.ofMinutes(15))   // default: 60 min
     .keepDays(14)                            // default: 7
-    .withDirectMemory()                  // opt-in
-    .withClassLoading()                  // opt-in
-    .withCpu()                           // opt-in
-    .withCodeCache()                     // opt-in
-    .withProcessMemory()                 // opt-in
+    .maxSizeMb(500)                           // default: 0 (disabled)
+    .withDirectMemory()                       // opt-in
+    .withClassLoading()                       // opt-in
+    .withCpu()                                // opt-in
+    .withCodeCache()                          // opt-in
+    .withProcessMemory()                      // opt-in
     .start();
 
 // Stop — symmetric with start
@@ -72,6 +73,7 @@ one-line `Metrics.start("app-name")`, with no code change:
 -Dmetrics.sample.interval=5s    # default: same as metrics.write.interval
 -Dmetrics.write.interval=15     # minutes; or with a unit: 500ms, 30s, 2m
 -Dmetrics.keep.days=14
+-Dmetrics.max.size.mb=500       # default: 0 (disabled)
 -Dmetrics.opt.direct=true
 -Dmetrics.opt.classloading=true
 -Dmetrics.opt.cpu=true
@@ -87,6 +89,15 @@ always flushed on `stop()` so a clean shutdown never loses buffered
 samples. Call `Metrics.snapshot()` to sample and write immediately,
 without waiting for the next scheduled write — useful for marking a
 test phase.
+
+Files are deleted after `keepDays`, and — if `maxSizeMb` is set above
+its default of `0` (disabled) — the oldest surviving files are also
+deleted whenever the total size of this app's own files goes over that
+cap, independently of their age. This is a safety net for a machine
+that might go unattended for longer than its disk can hold at the
+configured sample rate; set `keepDays` generously (well above the
+longest period the deployment might go without being accessed) and let
+`maxSizeMb` be the actual backstop.
 
 ### Custom metrics
 

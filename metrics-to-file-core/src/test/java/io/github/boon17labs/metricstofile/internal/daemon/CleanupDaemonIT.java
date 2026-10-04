@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 
@@ -58,6 +59,28 @@ class CleanupDaemonIT {
     }
 
     @Test
+    void shouldDeleteOldestFileOverSizeCapShortlyAfterStarting(@TempDir final File logDir)
+            throws Exception {
+        // given: two 700 KB files (1.4 MB total); a 1 MB cap can only hold one
+        final File older = fileOfSize(logDir, LocalDate.now().minusDays(1), 700_000);
+        final File newer = fileOfSize(logDir, LocalDate.now(), 700_000);
+        final CleanupDaemon daemon =
+                new CleanupDaemon(logDir, "order-service", 7, 1L, SHORT_INTERVAL_MILLIS);
+
+        // when
+        daemon.start();
+        try {
+            waitUntil(() -> !older.exists());
+        } finally {
+            daemon.shutdown();
+        }
+
+        // then
+        assertFalse(older.exists());
+        assertTrue(newer.exists());
+    }
+
+    @Test
     void shouldRunAsDaemonThread(@TempDir final File logDir) {
         // given
         final CleanupDaemon daemon =
@@ -96,6 +119,15 @@ class CleanupDaemonIT {
             daemon.shutdown();
             daemon.join(POLL_TIMEOUT_MILLIS);
         });
+    }
+
+    private static File fileOfSize(final File logDir, final LocalDate date, final int sizeBytes)
+            throws IOException {
+        final File file = new File(logDir, "order-service-" + date + ".log");
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(new byte[sizeBytes]);
+        }
+        return file;
     }
 
     private static void waitUntil(final Condition condition) throws InterruptedException {

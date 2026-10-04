@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -31,6 +32,7 @@ class MetricsIT {
         System.clearProperty("metrics.write.interval");
         System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
+        System.clearProperty("metrics.max.size.mb");
         System.clearProperty("metrics.opt.direct");
         System.clearProperty("metrics.opt.classloading");
         System.clearProperty("metrics.opt.cpu");
@@ -164,6 +166,36 @@ class MetricsIT {
 
         // then
         waitUntil(() -> !oldFile.exists());
+    }
+
+    @Test
+    void shouldDeleteOldestFileOverMaxSizeMbFromBuilder(@TempDir final File logDir)
+            throws IOException, InterruptedException {
+        // given: two 700 KB files (1.4 MB total); a 1 MB cap can only hold one
+        System.setProperty("metrics.implementation", "file");
+        final File older = fileOfSize(logDir, LocalDate.now().minusDays(2), 700_000);
+        final File newer = fileOfSize(logDir, LocalDate.now().minusDays(1), 700_000);
+
+        // when
+        Metrics.builder()
+                .appName("order-service")
+                .logDir(logDir.getAbsolutePath())
+                .writeInterval(Duration.ofMillis(20L))
+                .maxSizeMb(1L)
+                .start();
+
+        // then
+        waitUntil(() -> !older.exists());
+        assertTrue(newer.exists());
+    }
+
+    private static File fileOfSize(final File logDir, final LocalDate date, final int sizeBytes)
+            throws IOException {
+        final File file = new File(logDir, "order-service-" + date + ".log");
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(new byte[sizeBytes]);
+        }
+        return file;
     }
 
     @Test

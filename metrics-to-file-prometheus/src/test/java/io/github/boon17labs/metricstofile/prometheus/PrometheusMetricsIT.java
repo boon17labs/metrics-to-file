@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -44,6 +45,7 @@ class PrometheusMetricsIT {
         System.clearProperty("metrics.write.interval");
         System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
+        System.clearProperty("metrics.max.size.mb");
     }
 
     // ---- what start() produces ------------------------------------------------------
@@ -250,6 +252,21 @@ class PrometheusMetricsIT {
         assertTrue(recent.exists(), "metrics.keep.days=30 must keep a 10 day old file");
     }
 
+    @Test
+    void shouldDeleteOldestFileOverMaxSizeMbFromBuilder(@TempDir final File logDir)
+            throws Exception {
+        // given: two 700 KB files (1.4 MB total); a 1 MB cap can only hold one
+        final File older = fileOfSize(logDir, LocalDate.now().minusDays(2), 700_000, ".prom");
+        final File newer = fileOfSize(logDir, LocalDate.now().minusDays(1), 700_000, ".prom");
+
+        // when
+        start(builder(logDir).maxSizeMb(1L));
+
+        // then
+        assertTrue(waitUntil(() -> !older.exists()), "oldest .prom file was not cleaned up");
+        assertTrue(newer.exists());
+    }
+
     // ---- error handling --------------------------------------------------------------
 
     @Test
@@ -304,6 +321,15 @@ class PrometheusMetricsIT {
     private static File createFile(final File dir, final String name) throws IOException {
         final File file = new File(dir, name);
         assertTrue(file.createNewFile());
+        return file;
+    }
+
+    private static File fileOfSize(final File logDir, final LocalDate date, final int sizeBytes,
+            final String suffix) throws IOException {
+        final File file = new File(logDir, "order-service-" + date + suffix);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(new byte[sizeBytes]);
+        }
         return file;
     }
 

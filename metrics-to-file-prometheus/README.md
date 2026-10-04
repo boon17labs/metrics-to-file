@@ -31,6 +31,7 @@ PrometheusMetrics.builder()
     .sampleInterval(Duration.ofSeconds(5))   // default: same as writeInterval
     .writeInterval(Duration.ofMinutes(15))   // default: 60 min
     .keepDays(14)                            // default: 7
+    .maxSizeMb(500)                           // default: 0 (disabled)
     .start();
 
 // Stop — symmetric with start
@@ -79,7 +80,10 @@ jvm_gc_pause_seconds_count{action="end of major GC",application="order-service",
   collector.
 - **Rotation, permissions, cleanup.** A new day is a new file. Files
   are restricted to owner read/write. Files older than `keepDays` are
-  deleted automatically; only `.prom` files of this app name are
+  deleted automatically, and — if `maxSizeMb` is set above its default
+  of `0` (disabled) — the oldest surviving files are also deleted
+  whenever this app's own `.prom` files exceed that total size,
+  independently of their age; only `.prom` files of this app name are
   touched, so `.log` files written by `metrics-to-file-core` in the
   same directory are left alone.
 
@@ -109,12 +113,16 @@ is used; otherwise the default. `appName` is required.
 | `sampleInterval(Duration)` | `metrics.sample.interval` (minutes, or with a unit suffix: `500ms`, `30s`, `2m`) | same as `writeInterval` |
 | `writeInterval(Duration)` | `metrics.write.interval` (same format) | 60 minutes |
 | `keepDays(int)`    | `metrics.keep.days`               | 7          |
+| `maxSizeMb(long)`  | `metrics.max.size.mb`             | 0 (disabled) |
 
 These are the same properties `metrics-to-file-core` uses, so an
 application that runs both is tuned in one place — for example
 `-Dmetrics.write.interval=15` on the command line changes both, with
-no code change. An invalid property value, or an interval that isn't
-positive, is warned about on stderr and the default wins.
+no code change. An invalid property value, an interval that isn't
+positive, or a negative `maxSizeMb`, is warned about on stderr and the
+default wins. Set `keepDays` well above the longest period the
+deployment might go without being accessed, and use `maxSizeMb` as the
+actual backstop against an unattended machine filling its disk.
 
 ## Lifecycle and threading
 

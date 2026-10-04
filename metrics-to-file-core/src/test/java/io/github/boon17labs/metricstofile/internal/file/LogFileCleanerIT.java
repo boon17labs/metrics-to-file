@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 
@@ -106,6 +107,87 @@ class LogFileCleanerIT {
     }
 
     @Test
+    void shouldDeleteOldestSurvivingFilesWhenOverSizeCap(@TempDir final File logDir)
+            throws IOException {
+        // given: three 400 KB files; a 1 MB cap can only hold two
+        final File oldest =
+                fileOfSize(logDir, "order-service", LocalDate.now().minusDays(2), 400_000);
+        final File middle =
+                fileOfSize(logDir, "order-service", LocalDate.now().minusDays(1), 400_000);
+        final File newest = fileOfSize(logDir, "order-service", LocalDate.now(), 400_000);
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, 1L, ".log");
+
+        // then
+        assertFalse(oldest.exists());
+        assertTrue(middle.exists());
+        assertTrue(newest.exists());
+    }
+
+    @Test
+    void shouldKeepFilesWhenUnderSizeCap(@TempDir final File logDir) throws IOException {
+        // given
+        final File file = fileOfSize(logDir, "order-service", LocalDate.now(), 100);
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, 1L, ".log");
+
+        // then
+        assertTrue(file.exists());
+    }
+
+    @Test
+    void shouldNotApplySizeCapWhenDisabled(@TempDir final File logDir) throws IOException {
+        // given: well over any reasonable cap, but maxSizeMb=0 means disabled
+        final File oldest =
+                fileOfSize(logDir, "order-service", LocalDate.now().minusDays(2), 2_000_000);
+        final File newest = fileOfSize(logDir, "order-service", LocalDate.now(), 2_000_000);
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, 0L, ".log");
+
+        // then
+        assertTrue(oldest.exists());
+        assertTrue(newest.exists());
+    }
+
+    @Test
+    void shouldNotCountOtherAppNamesOrSuffixesAgainstTheSizeCap(@TempDir final File logDir)
+            throws IOException {
+        // given
+        final File otherAppLargeFile =
+                fileOfSize(logDir, "other-service", LocalDate.now().minusDays(2), 2_000_000);
+        final File otherSuffixLargeFile =
+                fileOfSize(logDir, "order-service", LocalDate.now().minusDays(2), 2_000_000, ".prom");
+        final File thisAppSmallFile = fileOfSize(logDir, "order-service", LocalDate.now(), 100);
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, 1L, ".log");
+
+        // then
+        assertTrue(otherAppLargeFile.exists());
+        assertTrue(otherSuffixLargeFile.exists());
+        assertTrue(thisAppSmallFile.exists());
+    }
+
+    @Test
+    void shouldApplyAgeBasedDeletionBeforeTheSizeCap(@TempDir final File logDir)
+            throws IOException {
+        // given: an old file that age-based cleanup removes on its own, well within the cap
+        final File oldFile =
+                fileOfSize(logDir, "order-service", LocalDate.now().minusDays(10), 100);
+        final File recentFile = fileOfSize(logDir, "order-service", LocalDate.now(), 100);
+
+        // when
+        LogFileCleaner.clean(logDir, "order-service", KEEP_DAYS, 1L, ".log");
+
+        // then
+        assertFalse(oldFile.exists());
+        assertTrue(recentFile.exists());
+    }
+
+    @Test
     void shouldNotThrowWhenDirectoryDoesNotExist(@TempDir final File tempDir) {
         // given
         final File missingDir = new File(tempDir, "does-not-exist");
@@ -128,6 +210,20 @@ class LogFileCleanerIT {
             final String suffix) throws IOException {
         final File file = new File(logDir, appName + "-" + date + suffix);
         assertTrue(file.createNewFile());
+        return file;
+    }
+
+    private static File fileOfSize(final File logDir, final String appName, final LocalDate date,
+            final int sizeBytes) throws IOException {
+        return fileOfSize(logDir, appName, date, sizeBytes, ".log");
+    }
+
+    private static File fileOfSize(final File logDir, final String appName, final LocalDate date,
+            final int sizeBytes, final String suffix) throws IOException {
+        final File file = new File(logDir, appName + "-" + date + suffix);
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(new byte[sizeBytes]);
+        }
         return file;
     }
 }

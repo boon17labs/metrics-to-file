@@ -18,6 +18,7 @@ class BuilderPropertiesTest {
         System.clearProperty("metrics.write.interval");
         System.clearProperty("metrics.sample.interval");
         System.clearProperty("metrics.keep.days");
+        System.clearProperty("metrics.max.size.mb");
         System.clearProperty("metrics.opt.direct");
     }
 
@@ -137,6 +138,44 @@ class BuilderPropertiesTest {
     void shouldFallBackToWriteIntervalWhenExplicitSampleIntervalIsNegative() {
         assertEquals(Duration.ofMinutes(5L),
                 BuilderProperties.sampleInterval(Duration.ofSeconds(-1L), Duration.ofMinutes(5L)));
+    }
+
+    @Test
+    void shouldReturnExplicitMaxSizeMbWhenSet() {
+        assertEquals(500L, BuilderProperties.maxSizeMb(500L));
+    }
+
+    @Test
+    void shouldReturnPropertyMaxSizeMbWhenExplicitNotSet() {
+        System.setProperty("metrics.max.size.mb", "200");
+        assertEquals(200L, BuilderProperties.maxSizeMb(null));
+    }
+
+    @Test
+    void shouldReturnDefaultMaxSizeMbWhenNeitherSet() {
+        assertEquals(0L, BuilderProperties.maxSizeMb(null));
+    }
+
+    @Test
+    void shouldReturnZeroExplicitMaxSizeMbAsDisabled() {
+        assertEquals(0L, BuilderProperties.maxSizeMb(0L));
+    }
+
+    @Test
+    void shouldReturnDefaultMaxSizeMbWhenPropertyIsNotANumber() {
+        System.setProperty("metrics.max.size.mb", "not-a-number");
+        assertEquals(0L, BuilderProperties.maxSizeMb(null));
+    }
+
+    @Test
+    void shouldReturnDefaultMaxSizeMbWhenPropertyIsNegative() {
+        System.setProperty("metrics.max.size.mb", "-1");
+        assertEquals(0L, BuilderProperties.maxSizeMb(null));
+    }
+
+    @Test
+    void shouldReturnDefaultMaxSizeMbWhenExplicitIsNegative() {
+        assertEquals(0L, BuilderProperties.maxSizeMb(-1L));
     }
 
     @Test
